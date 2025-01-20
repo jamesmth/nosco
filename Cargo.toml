@@ -1,0 +1,35 @@
+[workspace]
+members = ["crates/nosco-*"]
+resolver = "2"
+
+[workspace.package]
+version = "0.0.0-reserved"
+rust-version = "1.80.1"
+authors = ["James Smith <jamesmth@proton.me>"]
+categories = ["development-tools::debugging"]
+edition = "2021"
+keywords = []
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/jamesmth/nosco"
+
+[workspace.dependencies]
+nosco-tracer = { path = "crates/nosco-tracer" }
+thiserror = "2.0.11"
+tokio = "1.43.0"
+tracing = "0.1.41"
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[workspace.lints.rust]
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+expect_used = "deny"
+panic = "deny"
+print_stderr = "deny"
+print_stdout = "deny"
+todo = "deny"
+unwrap_used = "deny"
