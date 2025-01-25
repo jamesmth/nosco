@@ -1,0 +1,67 @@
+name: Continuous Integration
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+# ensure that the workflow is only triggered once per PR,  subsequent pushes to the PR will cancel
+# and restart the workflow. See https://docs.github.com/en/actions/using-jobs/using-concurrency
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+# lint, clippy and coverage jobs are intentionally early in the workflow to catch simple formatting,
+# typos, and missing tests as early as possible.
+jobs:
+  lint-formatting:
+    name: Check Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: rustfmt }
+      - run: cargo fmt --check --all
+
+  lint-typos:
+    name: Check Typos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@master
+
+  # Check for any disallowed dependencies in the codebase due to license/security issues.
+  # See <https://github.com/EmbarkStudios/cargo-deny>
+  cargo-deny:
+    name: Check Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-deny
+      - run: cargo deny --log-level info --all-features check
+
+  # Check for any unused dependencies in the codebase.
+  # See <https://github.com/bnjbvr/cargo-machete/>
+  cargo-machete:
+    name: Check Unused Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bnjbvr/cargo-machete@v0.7.0
+
+  # Run cargo clippy.
+  lint-clippy:
+    name: Check Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: clippy }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-features
