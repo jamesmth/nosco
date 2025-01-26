@@ -35,14 +35,14 @@ async fn main() {
         .build();
 
     // initialize the process to trace
-    let mut process = Command::new("ls");
-    process.arg("/");
+    let mut cmd = Command::new("ls");
+    cmd.arg("/");
 
     // spawn the process to trace
-    let (_process, trace_task) = tracer.spawn(process).await.unwrap();
+    let process = tracer.spawn(cmd).await.unwrap();
 
     // wait for the traced process to exit
-    let exit_code = trace_task.run().await.unwrap();
+    let exit_code = process.resume_and_trace().await.unwrap();
 }
 
 struct CustomHandler;
