@@ -76,6 +76,6 @@ Introspection** under the hood. The possibilities are endless.
 
 Most of the time, you won't need to go this far. If you simply need to trace
 a process running on the same machine as the tracer, you can use the
-default debugger provided by the [nosco-debugger] crate.
+default debugger provided by [nosco-debugger].
 
-[nosco-debugger]: https://crates.io/crates/nosco-debugger
+[nosco-debugger]: ../nosco-debugger/README.md
