@@ -17,6 +17,15 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 nosco-debugger = { workspace = true }
+
+capstone = { workspace = true }
+indoc = { workspace = true }
+libyml = { workspace = true }
+nasm-rs = { workspace = true }
+regex = { workspace = true }
+serde_yml = { workspace = true }
+tempfile = { workspace = true }
+test-log = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
