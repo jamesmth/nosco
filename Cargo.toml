@@ -14,6 +14,7 @@ readme = "README.md"
 repository = "https://github.com/jamesmth/nosco"
 
 [workspace.dependencies]
+nosco-debugger = { path = "crates/nosco-debugger" }
 nosco-tracer = { path = "crates/nosco-tracer" }
 
 byteorder = "1.5.0"

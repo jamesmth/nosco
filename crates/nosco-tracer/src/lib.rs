@@ -14,6 +14,57 @@
 //! The [EventHandler](self::handler::EventHandler) trait allows define custom
 //! logic for handling execution events from a spawned process.
 //!
+//! ```no_run
+//! use std::process::Command;
+//!
+//! use nosco_debugger::{Debugger, Session};
+//!
+//! use nosco_tracer::debugger::DebugSession;
+//! use nosco_tracer::handler::EventHandler;
+//! use nosco_tracer::tracer::Tracer;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     // initialize the tracer
+//!     let tracer = Tracer::builder()
+//!         .with_debugger(Debugger::default())
+//!         .with_event_handler(CustomHandler)
+//!         .trace_all(3)
+//!         .build();
+//!
+//!     // initialize the process to trace
+//!     let mut cmd = Command::new("ls");
+//!     cmd.arg("/");
+//!
+//!     // spawn the process to trace
+//!     let process = tracer.spawn(cmd).await.unwrap();
+//!
+//!     // wait for the traced process to exit
+//!     let exit_code = process.resume_and_trace().await.unwrap();
+//! }
+//!
+//! struct CustomHandler;
+//!
+//! impl EventHandler for CustomHandler {
+//!     type Session = Session;
+//!     type Error = std::io::Error;
+//!
+//!     async fn instruction_executed(
+//!         &mut self,
+//!         _session: &mut Self::Session,
+//!         _thread: &<Self::Session as DebugSession>::StoppedThread,
+//!         _opcodes_addr: u64,
+//!         _opcodes: Vec<u8>,
+//!     ) -> Result<(), Self::Error> {
+//!         //
+//!         // do some action with the executed instruction
+//!         //
+//!
+//!         Ok(())
+//!     }
+//! }
+//! ```
+//!
 //! # Implementing a custom debugger
 //!
 //! This is the advanced use case of this crate.
@@ -23,6 +74,10 @@
 //! process. For instance, an application could spawn and trace a process by
 //! leveraging **Remote Debugging** (e.g., `gdb`, `lldb`) or **Virtual Machine
 //! Introspection** under the hood. The possibilities are endless.
+//!
+//! Most of the time, you won't need to go this far. If you simply need to trace
+//! a process running on the same machine as the tracer, you can use the
+//! default debugger provided by `nosco-debugger`.
 
 /// Module containing traits for implementing a custom debugger.
 pub mod debugger;
