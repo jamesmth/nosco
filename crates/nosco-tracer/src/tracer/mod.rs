@@ -1,17 +1,19 @@
 mod builder;
 mod state;
+mod tracee;
 
 use std::collections::hash_map::{Entry, OccupiedEntry, VacantEntry};
 use std::collections::{HashMap, HashSet};
 use std::process::Command as StdCommand;
 
-use tokio::process::{Child, Command};
+use tokio::process::Command;
 
 use tracing::Instrument;
 
 pub use self::builder::Builder;
 use self::builder::NeedsDebugger;
 use self::state::{FullTraceState, ScopedTraceConfig, ScopedTraceState};
+pub use self::tracee::TracedProcess;
 use crate::debugger::{BinaryInformation, DebugEvent, DebugStateChange, Debugger};
 use crate::debugger::{CpuInstruction, CpuInstructionType};
 use crate::debugger::{DebugSession, Thread};
@@ -42,15 +44,13 @@ impl<D: Debugger, H> Tracer<D, H> {
     ///
     /// # Note
     ///
-    /// The spawned process (tracee) is suspended until [TraceTask::run] is
-    /// called.
-    ///
-    /// If `Child` is dropped, the tracee is killed.
+    /// The spawned process (tracee) is suspended until [resume_and_trace](TracedProcess::resume_and_trace)
+    /// is called.
     #[tracing::instrument(name = "Spawn", skip(self))]
     pub async fn spawn(
         mut self,
         command: StdCommand,
-    ) -> Result<(Child, TraceTask<D::Session, H>), D::Error> {
+    ) -> Result<TracedProcess<D::Session, H>, D::Error> {
         let mut command: Command = command.into();
 
         let (session, child) = self.debugger.spawn(&mut command).await?;
@@ -59,7 +59,7 @@ impl<D: Debugger, H> Tracer<D, H> {
 
         let task = self.start_task(session);
 
-        Ok((child, task))
+        Ok(TracedProcess::new(task, Some(child)))
     }
 
     fn start_task(self, session: D::Session) -> TraceTask<D::Session, H> {
@@ -84,7 +84,7 @@ pub(crate) enum TraceModeConfig {
 /// Tracing task.
 ///
 /// The tracee is suspended until [run](Self::run) is called.
-pub struct TraceTask<S: DebugSession, H> {
+struct TraceTask<S: DebugSession, H> {
     /// Debug session over the tracee.
     session: S,
 
