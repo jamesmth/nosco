@@ -1,0 +1,32 @@
+[package]
+name = "nosco-debugger"
+version.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[dependencies]
+capstone = { workspace = true }
+nosco-tracer = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["process"] }
+tracing = { workspace = true }
+wholesym = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+byteorder = { workspace = true }
+futures-util = { workspace = true }
+goblin = { workspace = true, features = ["std", "elf32", "elf64", "endian_fd"] }
+nix = { workspace = true, features = ["mman", "ptrace"] }
+scroll = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util", "process"] }
+tokio-stream = { workspace = true, features = ["fs"] }
+tokio-util = { workspace = true, features = ["codec"] }
+
+[lints]
+workspace = true
