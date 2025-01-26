@@ -65,3 +65,34 @@ jobs:
         with: { components: clippy }
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-features -- -D warnings
+
+  # Run cargo test on the documentation of the crate. This will catch any code
+  # examples that don't compile, or any other issues in the documentation.
+  test-docs:
+    name: Test Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo t --doc --all-features
+
+  # Run cargo test on the libraries of the crate.
+  test-libs:
+    name: Test Libs ${{ matrix.toolchain }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["1.80.1", "stable"]
+    steps:
+      - uses: ilammy/setup-nasm@v1
+      - uses: egor-tensin/setup-gcc@v1
+        with:
+          platform: i686
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo t --lib --all-targets --all-features
