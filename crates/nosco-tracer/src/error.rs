@@ -22,6 +22,10 @@ pub enum Error<E1, E2> {
     /// A symbol wasn't found within a binary.
     #[error("Symbol {1} not found in {0}")]
     SymbolNotFound(String, String),
+
+    /// The debugger didn't compute the return address of a function.
+    #[error("Debugger didn't compute a return address")]
+    NullReturnAddress,
 }
 
 /// Result type of this crate.

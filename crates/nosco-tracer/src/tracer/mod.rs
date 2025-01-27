@@ -267,6 +267,8 @@ where
                     .add_breakpoint(thread as &_, thread.ret_addr())
                     .map_err(DebuggerError)?;
                 breakpoints_on_ret.insert((thread.id(), thread.ret_addr()));
+            } else if max_depth_exceeded && thread.ret_addr() == 0 {
+                return Err(crate::Error::NullReturnAddress);
             }
 
             max_depth_exceeded
