@@ -71,7 +71,8 @@ impl Session {
             .into_iter()
             .chain(other_thread_ids.iter().copied())
         {
-            let mut regs = get_thread_registers(&session, thread_id, &disass)?;
+            let mut regs =
+                get_thread_registers(&session, thread_id, &disass, session.binary_ctx())?;
 
             let mut thread = thread_manager.register_thread_create(thread_id);
             thread.instr_addr = *regs.instr_addr_mut();
@@ -114,7 +115,12 @@ impl Session {
         }
 
         // retrieve the associated breakpoint (if enabled)
-        let mut regs = get_thread_registers(&self.inner, thread_id, &self.disass)?;
+        let mut regs = get_thread_registers(
+            &self.inner,
+            thread_id,
+            &self.disass,
+            self.inner.binary_ctx(),
+        )?;
         let trap_addr = *regs.instr_addr_mut() - super::breakpoint::TRAP_OPCODES.len() as u64;
         let breakpoint = self
             .breakpoint_manager
@@ -197,7 +203,12 @@ impl DebugSession for Session {
                     self.handle_trap(thread_id)?;
                 }
                 DebugStop::ThreadCreated { thread_id } => {
-                    let mut regs = get_thread_registers(&self.inner, thread_id, &self.disass)?;
+                    let mut regs = get_thread_registers(
+                        &self.inner,
+                        thread_id,
+                        &self.disass,
+                        self.inner.binary_ctx(),
+                    )?;
 
                     let mut thread = self.thread_manager.register_thread_create(thread_id);
                     thread.instr_addr = *regs.instr_addr_mut();
@@ -306,7 +317,12 @@ impl DebugSession for Session {
         &mut self,
         thread: &Self::StoppedThread,
     ) -> Result<Self::Registers, Self::Error> {
-        get_thread_registers(&self.inner, thread.id(), &self.disass)
+        get_thread_registers(
+            &self.inner,
+            thread.id(),
+            &self.disass,
+            self.inner.binary_ctx(),
+        )
     }
 
     fn set_registers(
@@ -356,6 +372,7 @@ impl<'a> SessionCx<'a> {
             debug_events,
         }
     }
+
     pub fn add_internal_breakpoint(&mut self, addr: u64) -> sys::Result<()> {
         self.breakpoint_manager
             .add_breakpoint_or_increment_usage(addr)
@@ -371,6 +388,7 @@ fn get_thread_registers(
     session: &sys::Session,
     thread_id: u64,
     disass: &capstone::Capstone,
+    bin_ctx: goblin::container::Ctx,
 ) -> crate::Result<sys::thread::ThreadRegisters> {
     let mut regs = sys::thread::get_thread_registers(thread_id)?;
 
@@ -401,17 +419,26 @@ fn get_thread_registers(
         };
 
         let get_retaddr_at = |addr| -> Option<u64> {
-            let mut buf = [0u8; 8];
-            session
-                .read_memory(addr, &mut buf)
-                .ok()
-                .map(|_| u64::from_le_bytes(buf))
-                .and_then(filter_has_call_at_addr)
+            let addr = if bin_ctx.is_big() {
+                let mut buf = [0u8; 8];
+                session
+                    .read_memory(addr, &mut buf)
+                    .ok()
+                    .map(|_| u64::from_le_bytes(buf))
+            } else {
+                let mut buf = [0u8; 4];
+                session
+                    .read_memory(addr, &mut buf)
+                    .ok()
+                    .map(|_| u32::from_le_bytes(buf) as u64)
+            };
+
+            addr.and_then(filter_has_call_at_addr)
         };
 
         let ret_addr = get_retaddr_at(*regs.stack_ptr_mut())
-            .or_else(|| get_retaddr_at(*regs.stack_ptr_mut() + 8))
-            .or_else(|| get_retaddr_at(*regs.frame_ptr_mut() + 8))
+            .or_else(|| get_retaddr_at(*regs.stack_ptr_mut() + bin_ctx.size() as u64))
+            .or_else(|| get_retaddr_at(*regs.frame_ptr_mut() + bin_ctx.size() as u64))
             .unwrap_or_default();
 
         *regs.ret_addr_mut() = ret_addr;

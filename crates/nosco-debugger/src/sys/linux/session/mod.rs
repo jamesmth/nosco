@@ -38,6 +38,9 @@ pub struct Session {
     /// Binary symbol resolver.
     symbol_manager: Arc<SymbolManager>,
 
+    /// Binary context (size, endianness) of the debuggee.
+    elf_ctx: goblin::container::Ctx,
+
     /// Executable address of the debuggee.
     exe_addr: u64,
 }
@@ -80,6 +83,7 @@ impl Session {
             rdebug_cx,
             link_map: scan.lms,
             symbol_manager,
+            elf_ctx: scan.elf_ctx,
             exe_addr: scan.exe_addr,
         })
     }
@@ -163,6 +167,11 @@ impl Session {
 
     pub fn write_memory(&self, addr: u64, buf: &[u8]) -> crate::sys::Result<()> {
         self::mem::write_process_memory(self.pid.as_raw() as u64, addr, buf)
+    }
+
+    /// Returns the binary context (size, endianness) of the debuggee.
+    pub fn binary_ctx(&self) -> goblin::container::Ctx {
+        self.elf_ctx
     }
 
     pub async fn wait_for_debug_stop(&mut self) -> crate::sys::Result<DebugStop> {
