@@ -1,5 +1,7 @@
+use std::path::Path;
 use std::sync::Arc;
-use std::{collections::HashSet, path::Path};
+
+use indexmap::IndexSet;
 
 use nix::sys::ptrace;
 use nix::unistd::Pid;
@@ -57,7 +59,7 @@ impl RDebug {
     /// Refresh the debuggee's state from its `r_debug` struct.
     pub fn refresh<S>(
         &mut self,
-        lms: &mut HashSet<LinkMap>,
+        lms: &mut IndexSet<LinkMap>,
         exe_addr: u64,
         symbol_manager: &Arc<SymbolManager>,
         on_state_change: impl FnMut(DebugStateChange<S>),
@@ -89,7 +91,7 @@ impl RDebug {
     /// map with it.
     pub fn update_lm<S>(
         &self,
-        lms: &mut HashSet<LinkMap>,
+        lms: &mut IndexSet<LinkMap>,
         exe_addr: u64,
         symbol_manager: &Arc<SymbolManager>,
         mut on_state_change: impl FnMut(DebugStateChange<S>),
@@ -98,7 +100,7 @@ impl RDebug {
         S: DebugSession<MappedBinary = MappedBinary>,
     {
         let new_lms = fetch_link_maps(self.pid, self.elf_ctx, self.rdebug_addr, exe_addr)?
-            .collect::<crate::sys::Result<HashSet<LinkMap>>>()?;
+            .collect::<crate::sys::Result<IndexSet<LinkMap>>>()?;
 
         new_lms
             .difference(lms)

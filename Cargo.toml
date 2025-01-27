@@ -21,6 +21,7 @@ byteorder = "1.5.0"
 capstone = { version = "0.12.0", features = ["full"] }
 futures-util = { version = "0.3.31", default-features = false }
 goblin = { version = "0.9.3", default-features = false }
+indexmap = "2.7.1"
 indoc = "2.0.5"
 libyml = "0.0.5"
 nasm-rs = "0.3.0"

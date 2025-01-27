@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::PathBuf;
 
 use futures_util::TryStreamExt;
@@ -8,8 +7,10 @@ use goblin::elf::header::{EM_386, EM_ARM, EM_X86_64, ET_DYN};
 use goblin::elf::program_header::{PT_DYNAMIC, PT_INTERP, PT_LOAD};
 use goblin::elf::section_header::SHT_SYMTAB;
 use goblin::elf::{Dyn, Elf, ProgramHeader, ProgramHeaders, SectionHeader, Symtab};
-
 use goblin::strtab::Strtab;
+
+use indexmap::IndexSet;
+
 use nix::libc::{AT_BASE, AT_ENTRY, AT_PHDR, AT_PHNUM, AT_SYSINFO_EHDR};
 use nix::unistd::Pid;
 
@@ -23,7 +24,7 @@ pub struct ExecutableScan {
     pub rdebug_addr_loc: u64,
     pub rdebug_addr: u64,
     pub elf_ctx: goblin::container::Ctx,
-    pub lms: HashSet<LinkMap>,
+    pub lms: IndexSet<LinkMap>,
 }
 
 /// Scan the debuggee's mapped executable.
@@ -207,10 +208,10 @@ fn init_link_map(
     mut ld_addr: Option<u64>,
     mut vdso_addr: Option<u64>,
     phdrs: &ProgramHeaders,
-) -> crate::sys::Result<HashSet<LinkMap>> {
+) -> crate::sys::Result<IndexSet<LinkMap>> {
     const VDSO_NAME: &str = "linux-vdso.so.1";
 
-    let mut lms = HashSet::new();
+    let mut lms = IndexSet::new();
 
     lms.insert(LinkMap {
         base_addr: exe_addr,

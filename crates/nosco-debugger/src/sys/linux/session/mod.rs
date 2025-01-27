@@ -3,9 +3,10 @@ mod elf;
 mod rdebug;
 mod watchpoint;
 
-use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
+
+use indexmap::IndexSet;
 
 use nix::libc::{PTRACE_EVENT_CLONE, PTRACE_EVENT_EXIT};
 use nix::sys::ptrace;
@@ -32,7 +33,7 @@ pub struct Session {
     rdebug_cx: RDebugContext,
 
     /// Current link map in the debuggee.
-    link_map: HashSet<LinkMap>,
+    link_map: IndexSet<LinkMap>,
 
     /// Binary symbol resolver.
     symbol_manager: Arc<SymbolManager>,

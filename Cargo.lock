@@ -1078,6 +1078,7 @@ dependencies = [
  "capstone",
  "futures-util",
  "goblin",
+ "indexmap",
  "nix",
  "nosco-tracer",
  "scroll",
