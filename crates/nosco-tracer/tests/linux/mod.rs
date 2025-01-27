@@ -52,7 +52,11 @@ pub async fn test_trace_hello(is_64bit: bool, is_pie: bool, is_static: bool) {
     let base_dir: PathBuf = "tests/linux".to_owned().into();
 
     let asm_file = format!("hello.{}.asm", if is_64bit { "64" } else { "32" });
-    let trace_file = format!("hello.{}.yml", if is_64bit { "64" } else { "32" });
+    let trace_file = format!(
+        "hello.{}{}.yml",
+        if is_64bit { "64" } else { "32" },
+        if is_static { ".static" } else { "" }
+    );
 
     let tracee_path =
         self::utils::compile_tracee(&base_dir.join(asm_file), is_64bit, is_pie, is_static);

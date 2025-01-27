@@ -45,7 +45,7 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
     async fn binary_loaded(
         &mut self,
         _session: &mut Self::Session,
-        _thread_id: Option<u64>,
+        thread_id: Option<u64>,
         binary: &<Self::Session as nosco_tracer::debugger::DebugSession>::MappedBinary,
     ) -> Result<(), Self::Error> {
         use nosco_tracer::debugger::BinaryInformation;
@@ -53,6 +53,18 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         if binary.file_name() == self.exe_name {
             let view = binary.to_view().await.expect("view");
             self.mapped_exe = Some(view);
+        }
+
+        if thread_id.is_none() {
+            let trace_event = self.expected.next().expect("next").expect("event");
+
+            match trace_event {
+                TraceEvent::StateInitBinaryLoaded { name } if name == "<exe>" => {
+                    assert_eq!(self.exe_name, binary.file_name())
+                }
+                TraceEvent::StateInitBinaryLoaded { name } => assert_eq!(name, binary.file_name()),
+                _ => panic!("bad trace event"),
+            }
         }
 
         Ok(())
