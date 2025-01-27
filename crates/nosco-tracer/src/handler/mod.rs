@@ -10,13 +10,13 @@ pub trait EventHandler {
     /// Error returned by this event handler.
     type Error: std::error::Error;
 
-    /// Function called when a traced function is being called.
+    /// Function called when a function is being called.
     ///
     /// Only the functions called within the trace scope are handled.
     /// Check out [Builder::trace_all](super::tracer::Builder::trace_all) and
     /// [Builder::trace_scopes](super::tracer::Builder::trace_scopes) for more
     /// information.
-    fn traced_function_entered(
+    fn function_entered(
         &mut self,
         _session: &mut Self::Session,
         _thread: &<Self::Session as DebugSession>::StoppedThread,
@@ -30,7 +30,7 @@ pub trait EventHandler {
     /// Check out [Builder::trace_all](super::tracer::Builder::trace_all) and
     /// [Builder::trace_scopes](super::tracer::Builder::trace_scopes) for more
     /// information.
-    fn traced_function_returned(
+    fn function_returned(
         &mut self,
         _session: &mut Self::Session,
         _thread: &<Self::Session as DebugSession>::StoppedThread,
@@ -64,6 +64,11 @@ pub trait EventHandler {
     }
 
     /// Function called when a new thread is created by the tracee.
+    ///
+    /// # Note
+    ///
+    /// `parent_thread_id` is `None` when the thread was created before
+    /// the tracer was attached to the tracee.
     fn thread_created(
         &mut self,
         _session: &mut Self::Session,

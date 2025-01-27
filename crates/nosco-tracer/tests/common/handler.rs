@@ -70,7 +70,7 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         Ok(())
     }
 
-    async fn traced_function_entered(
+    async fn function_entered(
         &mut self,
         _session: &mut Self::Session,
         thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
@@ -104,7 +104,7 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         Ok(())
     }
 
-    async fn traced_function_returned(
+    async fn function_returned(
         &mut self,
         _session: &mut Self::Session,
         _thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,

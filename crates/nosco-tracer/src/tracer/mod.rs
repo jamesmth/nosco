@@ -183,7 +183,7 @@ where
             tracing::info!("traced function called");
 
             self.handler
-                .traced_function_entered(&mut self.session, thread)
+                .function_entered(&mut self.session, thread)
                 .await
                 .map_err(HandlerError)?;
 
@@ -201,7 +201,7 @@ where
                 .map_err(DebuggerError)?;
 
             self.handler
-                .traced_function_returned(&mut self.session, thread)
+                .function_returned(&mut self.session, thread)
                 .await
                 .map_err(HandlerError)?;
 
@@ -250,7 +250,7 @@ where
 
         let disable_singlestep = if let CpuInstructionType::FnCall = exec_instr.ty {
             self.handler
-                .traced_function_entered(&mut self.session, thread)
+                .function_entered(&mut self.session, thread)
                 .await
                 .map_err(HandlerError)?;
 
@@ -274,7 +274,7 @@ where
             max_depth_exceeded
         } else if let CpuInstructionType::FnRet = exec_instr.ty {
             self.handler
-                .traced_function_returned(&mut self.session, thread)
+                .function_returned(&mut self.session, thread)
                 .await
                 .map_err(HandlerError)?;
 
