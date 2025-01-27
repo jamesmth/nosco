@@ -14,10 +14,10 @@ trace:
     - 0x0000: call 0x[0-9a-fA-F]+
     - ?: []
     - 0x0005: add ebx, 0x[0-9a-fA-F]+
-    - 0x000b: lea eax, \[ebx + 0x[0-9a-fA-F]+\]
+    - 0x000b: lea eax, \[ebx \+ 0x[0-9a-fA-F]+\]
     - 0x0011: push eax
     - 0x0012: call 0x[0-9a-fA-F]+
     - ?: []
-    - 0x0017: add esp, 0x4
+    - 0x0017: add esp, 4
     - 0x001a: xor eax, eax
     - 0x001c: ret

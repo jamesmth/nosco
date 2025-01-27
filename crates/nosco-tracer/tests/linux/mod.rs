@@ -62,7 +62,11 @@ pub async fn test_trace_hello(is_64bit: bool, is_pie: bool, is_static: bool) {
         self::utils::compile_tracee(&base_dir.join(asm_file), is_64bit, is_pie, is_static);
     let tracee_name = tracee_path.file_name().unwrap().to_string_lossy();
 
-    let trace_handler = TestTraceHandler::new(&base_dir.join(trace_file), tracee_name.to_string());
+    let trace_handler = TestTraceHandler::new(
+        &base_dir.join(trace_file),
+        tracee_name.to_string(),
+        is_64bit,
+    );
 
     let tracer = nosco_tracer::tracer::Tracer::builder()
         .with_debugger(nosco_debugger::Debugger)

@@ -21,19 +21,21 @@ pub struct TestTraceHandler {
 }
 
 impl TestTraceHandler {
-    pub fn new(trace_file: &Path, exe_name: String) -> Self {
+    pub fn new(trace_file: &Path, exe_name: String, is_64bits: bool) -> Self {
         use capstone::arch::BuildsCapstone;
 
         let expected = YamlStream::from_path(trace_file).expect("from_path");
 
+        let mode = if is_64bits {
+            capstone::arch::x86::ArchMode::Mode64
+        } else {
+            capstone::arch::x86::ArchMode::Mode32
+        };
+
         Self {
             expected,
             mapped_exe: None,
-            disass: capstone::Capstone::new()
-                .x86()
-                .mode(capstone::arch::x86::ArchMode::Mode64)
-                .build()
-                .unwrap(),
+            disass: capstone::Capstone::new().x86().mode(mode).build().unwrap(),
             exe_name,
             last_fn_addr: Vec::new(),
             mapped_images: HashMap::new(),
@@ -188,9 +190,20 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
             ins_pretty
         };
 
-        assert!(regex.is_match(&disass));
+        assert!(regex.is_match(&disass), "regex not matched by: {disass}");
 
         assert_eq!(opcodes_addr, self.last_fn_addr.last().unwrap() + offset);
+
+        Ok(())
+    }
+
+    async fn thread_exited(
+        &mut self,
+        _session: &mut Self::Session,
+        _thread_id: u64,
+        _exit_code: i32,
+    ) -> Result<(), Self::Error> {
+        assert!(self.expected.next().is_none());
 
         Ok(())
     }
