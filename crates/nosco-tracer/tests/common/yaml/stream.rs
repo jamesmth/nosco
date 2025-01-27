@@ -3,12 +3,13 @@ use std::io::Read;
 use std::mem;
 use std::path::Path;
 
-use super::parser::{FooterParser, HeaderParser, ScopeParser, YamlParser};
+use super::parser::{FooterParser, HeaderParser, InitParser, ScopeParser, YamlParser};
 
 use super::TraceEvent;
 
 enum ParserState<R: Read> {
     Header(HeaderParser<R>),
+    TraceInit(InitParser<R>),
     TraceBody(ScopeParser<R>),
     Footer(FooterParser<R>),
     End,
@@ -39,7 +40,15 @@ impl<R: Read> YamlStream<R> {
             match mem::replace(&mut self.parser_state, ParserState::End) {
                 ParserState::Header(parser) => {
                     let parser = parser.parse_header()?;
-                    self.parser_state = ParserState::TraceBody(parser);
+                    self.parser_state = ParserState::TraceInit(parser);
+                }
+                ParserState::TraceInit(mut parser) => {
+                    if let Some(event) = parser.next_event()? {
+                        self.parser_state = ParserState::TraceInit(parser);
+                        break Ok(Some(event));
+                    } else {
+                        self.parser_state = ParserState::TraceBody(parser.into_scope_parser());
+                    }
                 }
                 ParserState::TraceBody(mut parser) => {
                     if let Some(event) = parser.next_event()? {

@@ -8,57 +8,114 @@ use super::TraceEvent;
 
 pub struct HeaderParser<R: Read> {
     parser: YamlParser<R>,
-    expected: ExpectedEvent,
 }
 
 impl<R: Read> HeaderParser<R> {
     pub const fn new(parser: YamlParser<R>) -> Self {
-        Self {
-            parser,
-            expected: ExpectedEvent::StreamStart,
-        }
+        Self { parser }
     }
 
-    pub fn parse_header(mut self) -> super::Result<ScopeParser<R>> {
-        loop {
-            let event = self.parser.parse_next_event()?;
+    pub fn parse_header(mut self) -> super::Result<InitParser<R>> {
+        assert!(matches!(
+            self.parser.parse_next_event()?,
+            Event::StreamStart
+        ));
 
-            match (&self.expected, event) {
-                (ExpectedEvent::StreamStart, Event::StreamStart) => {
-                    self.expected = ExpectedEvent::DocStart
-                }
-                (ExpectedEvent::DocStart, Event::DocumentStart) => {
-                    break Ok(ScopeParser {
-                        parser: self.parser,
-                        expected: ExpectedEvent::SeqStart,
-                        depth: 1,
-                    })
-                }
-                _ => panic!("invalid YAML"),
-            }
-        }
+        assert!(matches!(
+            self.parser.parse_next_event()?,
+            Event::DocumentStart
+        ));
+
+        Ok(InitParser {
+            parser: self.parser,
+            expected: ExpectedEvent::MapStart,
+        })
     }
 }
 
 pub struct FooterParser<R: Read> {
     parser: YamlParser<R>,
-    expected: ExpectedEvent,
 }
 
 impl<R: Read> FooterParser<R> {
     pub fn parse_footer(mut self) -> super::Result<()> {
-        loop {
-            let event = self.parser.parse_next_event()?;
+        assert!(matches!(self.parser.parse_next_event()?, Event::MappingEnd));
+        assert!(matches!(
+            self.parser.parse_next_event()?,
+            Event::DocumentEnd
+        ));
+        assert!(matches!(self.parser.parse_next_event()?, Event::StreamEnd));
+        Ok(())
+    }
+}
 
-            match (&self.expected, event) {
-                (ExpectedEvent::DocEnd, Event::DocumentEnd) => {
-                    self.expected = ExpectedEvent::StreamEnd
+pub struct InitParser<R: Read> {
+    parser: YamlParser<R>,
+    expected: ExpectedEvent,
+}
+
+impl<R: Read> InitParser<R> {
+    pub fn next_event(&mut self) -> super::Result<Option<TraceEvent>> {
+        loop {
+            match self.expected {
+                ExpectedEvent::MapStart => {
+                    assert!(matches!(
+                        self.parser.parse_next_event()?,
+                        Event::MappingStart(_)
+                    ));
+
+                    let Event::Scalar(scalar) = self.parser.parse_next_event()? else {
+                        panic!("invalid YAML");
+                    };
+
+                    assert_eq!(String::from_utf8_lossy(&scalar.value), "init");
+
+                    assert!(matches!(
+                        self.parser.parse_next_event()?,
+                        Event::MappingStart(_)
+                    ));
+
+                    let Event::Scalar(scalar) = self.parser.parse_next_event()? else {
+                        panic!("invalid YAML");
+                    };
+
+                    assert_eq!(String::from_utf8_lossy(&scalar.value), "loaded_binaries");
+
+                    assert!(matches!(
+                        self.parser.parse_next_event()?,
+                        Event::SequenceStart(_)
+                    ));
+
+                    self.expected = ExpectedEvent::Scalar;
                 }
-                (ExpectedEvent::StreamEnd, Event::StreamEnd) => {
-                    break Ok(());
+                ExpectedEvent::Scalar => {
+                    let scalar = match self.parser.parse_next_event()? {
+                        Event::Scalar(scalar) => scalar,
+                        Event::SequenceEnd => {
+                            self.expected = ExpectedEvent::End;
+                            continue;
+                        }
+                        _ => panic!("invalid YAML"),
+                    };
+
+                    break Ok(Some(TraceEvent::StateInitBinaryLoaded {
+                        name: String::from_utf8_lossy(&scalar.value).into_owned(),
+                    }));
                 }
-                t => panic!("invalid YAML: {t:?}"),
+                ExpectedEvent::End => {
+                    assert!(matches!(self.parser.parse_next_event()?, Event::MappingEnd));
+                    break Ok(None);
+                }
+                _ => continue,
             }
+        }
+    }
+
+    pub fn into_scope_parser(self) -> ScopeParser<R> {
+        ScopeParser {
+            parser: self.parser,
+            expected: ExpectedEvent::Scalar,
+            depth: 1,
         }
     }
 }
@@ -78,11 +135,20 @@ impl<R: Read> ScopeParser<R> {
             }
 
             match self.expected {
-                ExpectedEvent::SeqStart => {
-                    let event = self.parser.parse_next_event()?;
-                    if !matches!(event, Event::SequenceStart(_)) {
+                ExpectedEvent::Scalar => {
+                    let Event::Scalar(scalar) = self.parser.parse_next_event()? else {
                         panic!("invalid YAML");
-                    }
+                    };
+
+                    assert_eq!(String::from_utf8_lossy(&scalar.value), "trace");
+
+                    self.expected = ExpectedEvent::SeqStart;
+                }
+                ExpectedEvent::SeqStart => {
+                    assert!(matches!(
+                        self.parser.parse_next_event()?,
+                        Event::SequenceStart(_)
+                    ));
 
                     self.expected = ExpectedEvent::MapStart;
                 }
@@ -101,7 +167,6 @@ impl<R: Read> ScopeParser<R> {
     pub fn into_footer_parser(self) -> FooterParser<R> {
         FooterParser {
             parser: self.parser,
-            expected: ExpectedEvent::DocEnd,
         }
     }
 
@@ -116,9 +181,7 @@ impl<R: Read> ScopeParser<R> {
                     return Ok(None);
                 } else {
                     // expect an end-of-scope
-                    let Event::MappingEnd = self.parser.parse_next_event()? else {
-                        panic!("invalid YAML");
-                    };
+                    assert!(matches!(self.parser.parse_next_event()?, Event::MappingEnd));
 
                     return Ok(Some(TraceEvent::FnReturn));
                 }
@@ -165,12 +228,9 @@ impl<R: Read> ScopeParser<R> {
 
 #[derive(Debug)]
 enum ExpectedEvent {
-    StreamStart,
-    StreamEnd,
-    DocStart,
-    DocEnd,
     SeqStart,
     MapStart,
+    Scalar,
     End,
 }
 
