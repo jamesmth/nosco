@@ -199,16 +199,26 @@ impl<R: Read> ScopeParser<R> {
             Event::Scalar(scalar) => {
                 let node_val = scalar.value;
 
-                let offset = String::from_utf8_lossy(&node_key);
-                let offset = u64::from_str_radix(offset.trim_start_matches("0x"), 16)?;
-
-                let asm = String::from_utf8_lossy(&node_val).into_owned();
-
-                let Event::MappingEnd = self.parser.parse_next_event()? else {
-                    panic!("invalid YAML");
+                let key = String::from_utf8_lossy(&node_key);
+                let trace_event = match key.as_ref() {
+                    "loaded" => {
+                        let name = String::from_utf8_lossy(&node_val).into_owned();
+                        TraceEvent::StateUpdateBinaryLoaded { name }
+                    }
+                    "unloaded" => {
+                        let name = String::from_utf8_lossy(&node_val).into_owned();
+                        TraceEvent::StateUpdateBinaryUnloaded { name }
+                    }
+                    _ => {
+                        let offset = u64::from_str_radix(key.trim_start_matches("0x"), 16)?;
+                        let asm = String::from_utf8_lossy(&node_val).into_owned();
+                        TraceEvent::Exec { offset, asm }
+                    }
                 };
 
-                TraceEvent::Exec { offset, asm }
+                assert!(matches!(self.parser.parse_next_event()?, Event::MappingEnd));
+
+                trace_event
             }
             Event::SequenceStart(_) => {
                 let name = String::from_utf8_lossy(&node_key).into_owned();

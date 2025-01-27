@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use nosco_tracer::debugger::BinaryView;
@@ -16,6 +17,7 @@ pub struct TestTraceHandler {
     disass: capstone::Capstone,
     exe_name: String,
     last_fn_addr: Vec<u64>,
+    mapped_images: HashMap<u64, String>,
 }
 
 impl TestTraceHandler {
@@ -34,6 +36,7 @@ impl TestTraceHandler {
                 .unwrap(),
             exe_name,
             last_fn_addr: Vec::new(),
+            mapped_images: HashMap::new(),
         }
     }
 }
@@ -55,9 +58,13 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
             self.mapped_exe = Some(view);
         }
 
-        if thread_id.is_none() {
-            let trace_event = self.expected.next().expect("next").expect("event");
+        let trace_event = self.expected.next().expect("next").expect("event");
 
+        if thread_id.is_some() {
+            assert!(
+                matches!(trace_event, TraceEvent::StateUpdateBinaryLoaded { name } if name == binary.file_name())
+            );
+        } else {
             match trace_event {
                 TraceEvent::StateInitBinaryLoaded { name } if name == "<exe>" => {
                     assert_eq!(self.exe_name, binary.file_name())
@@ -66,6 +73,30 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
                 _ => panic!("bad trace event"),
             }
         }
+
+        self.mapped_images
+            .insert(binary.base_addr(), binary.file_name().to_owned());
+
+        Ok(())
+    }
+
+    async fn binary_unloaded(
+        &mut self,
+        _session: &mut Self::Session,
+        _thread_id: u64,
+        unload_addr: u64,
+    ) -> Result<(), Self::Error> {
+        let TraceEvent::StateUpdateBinaryUnloaded { name } =
+            self.expected.next().expect("next").expect("event")
+        else {
+            panic!("bad trace event");
+        };
+
+        let Some(s) = self.mapped_images.remove(&unload_addr) else {
+            panic!("bad unload addr")
+        };
+
+        assert_eq!(name, s);
 
         Ok(())
     }

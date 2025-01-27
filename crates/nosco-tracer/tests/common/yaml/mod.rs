@@ -15,6 +15,8 @@ pub enum TraceEvent {
     FnReturn,
     Exec { offset: u64, asm: String },
     StateInitBinaryLoaded { name: String },
+    StateUpdateBinaryLoaded { name: String },
+    StateUpdateBinaryUnloaded { name: String },
 }
 
 #[test]
@@ -44,6 +46,23 @@ fn init_binary_loaded() {
     let mut stream = YamlStream::init(Cursor::new(input)).unwrap();
     assert!(is_init_binary_loaded(stream.next(), "foo.so"));
     assert!(is_init_binary_loaded(stream.next(), "bar.so"));
+    assert!(stream.next().is_none());
+}
+
+#[test]
+fn update_binary_loaded_unloaded() {
+    let input = indoc! {"
+        init:
+          loaded_binaries: []
+
+        trace:
+          - loaded: foo.so
+          - unloaded: foo.so
+    "};
+
+    let mut stream = YamlStream::init(Cursor::new(input)).unwrap();
+    assert!(is_update_binary_loaded(stream.next(), "foo.so"));
+    assert!(is_update_binary_unloaded(stream.next(), "foo.so"));
     assert!(stream.next().is_none());
 }
 
@@ -111,5 +130,19 @@ fn is_init_binary_loaded(event: Option<self::Result<TraceEvent>>, bin_name: &str
     matches!(
         event.expect("opt").expect("res"),
         TraceEvent::StateInitBinaryLoaded { name } if bin_name == name
+    )
+}
+
+fn is_update_binary_loaded(event: Option<self::Result<TraceEvent>>, bin_name: &str) -> bool {
+    matches!(
+        event.expect("opt").expect("res"),
+        TraceEvent::StateUpdateBinaryLoaded { name } if bin_name == name
+    )
+}
+
+fn is_update_binary_unloaded(event: Option<self::Result<TraceEvent>>, bin_name: &str) -> bool {
+    matches!(
+        event.expect("opt").expect("res"),
+        TraceEvent::StateUpdateBinaryUnloaded { name } if bin_name == name
     )
 }
