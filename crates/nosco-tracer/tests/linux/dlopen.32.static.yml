@@ -1,0 +1,35 @@
+---
+
+init:
+  loaded_binaries:
+    - <exe>
+    - linux-vdso.so.1
+
+trace:
+  - main:
+    - 0x0000: push ebp
+    - 0x0001: mov ebp, esp
+    - 0x0003: call 0x[0-9a-fA-F]+
+    - ?: []
+    - 0x0008: add ebx, 0x[0-9a-fA-F]+
+    - 0x000e: lea eax, \[ebx \+ 0x[0-9a-fA-F]+\]
+    - 0x0014: mov ecx, 1
+    - 0x0019: push ecx
+    - 0x001a: push eax
+    - 0x001b: call 0x[0-9a-fA-F]+
+    - ?:
+      - loaded: linux-gate.so.1
+      - loaded: libm.so.6
+      - loaded: libc.so.6
+      - loaded: ld-linux.so.2
+      - unloaded: linux-gate.so.1
+    - 0x0020: add esp, 8
+    - 0x0023: push eax
+    - 0x0024: call 0x[0-9a-fA-F]+
+    - ?:
+      - unloaded: libm.so.6
+      - unloaded: libc.so.6
+      - unloaded: ld-linux.so.2
+    - 0x0029: add esp, 4
+    - 0x002c: pop ebp
+    - 0x002d: ret

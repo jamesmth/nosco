@@ -1,0 +1,24 @@
+---
+
+init:
+  loaded_binaries:
+    - <exe>
+    - ld-linux-x86-64.so.2
+    - linux-vdso.so.1
+
+trace:
+  - loaded: libc.so.6
+  - main:
+    - 0x0000: push rbp
+    - 0x0001: mov rbp, rsp
+    - 0x0004: lea rdi, \[rip \+ 0x[0-9a-fA-F]+\]
+    - 0x000b: mov esi, 1
+    - 0x0010: call 0x[0-9a-fA-F]+
+    - ?:
+      - loaded: libm.so.6
+    - 0x0015: mov rdi, rax
+    - 0x0018: call 0x[0-9a-fA-F]+
+    - ?:
+      - unloaded: libm.so.6
+    - 0x001d: pop rbp
+    - 0x001e: ret
