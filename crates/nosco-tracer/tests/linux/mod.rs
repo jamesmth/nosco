@@ -88,6 +88,37 @@ async fn dlopen_32bit_pie_static() {
     test_trace_dlopen(false, true, true).await;
 }
 
+#[test(tokio::test)]
+async fn recursive_ret_breakpoint() {
+    let base_dir: PathBuf = "tests/linux".to_owned().into();
+
+    let asm_file = "recursive_ret_breakpoint.asm";
+    let trace_file = "recursive_ret_breakpoint.yml";
+
+    let tracee_path = self::utils::compile_tracee(&base_dir.join(asm_file), true, false, false);
+    let tracee_name = tracee_path.file_name().unwrap().to_string_lossy();
+
+    let trace_handler =
+        TestTraceHandler::new(&base_dir.join(trace_file), tracee_name.to_string(), true);
+
+    let tracer = nosco_tracer::tracer::Tracer::builder()
+        .with_debugger(nosco_debugger::Debugger)
+        .with_event_handler(trace_handler)
+        .trace_scopes()
+        .scope(tracee_name, "foo", 0)
+        .build();
+
+    let tracee = tracer
+        .spawn(std::process::Command::new(&tracee_path))
+        .await
+        .expect("spawn");
+
+    let exit_code = tracee.resume_and_trace().await.expect("run");
+    assert_eq!(exit_code, 0);
+
+    drop(tracee_path);
+}
+
 pub async fn test_trace_hello(is_64bit: bool, is_pie: bool, is_static: bool) {
     let base_dir: PathBuf = "tests/linux".to_owned().into();
 
