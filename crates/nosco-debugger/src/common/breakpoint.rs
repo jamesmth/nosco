@@ -32,6 +32,7 @@ impl BreakpointManager {
         self.bks.get(&addr).map(|cx| Breakpoint {
             orig_opcodes: cx.orig_opcodes,
             enabled: cx.enabled.clone(),
+            deleted: cx.deleted.clone(),
             debuggee_process_id: self.debuggee_process_id,
             addr,
         })
@@ -52,6 +53,7 @@ impl BreakpointManager {
                     orig_opcodes,
                     ref_count: 1,
                     enabled: Arc::default(),
+                    deleted: Arc::default(),
                 })
             }
         };
@@ -59,6 +61,7 @@ impl BreakpointManager {
         let bk = Breakpoint {
             orig_opcodes: cx.orig_opcodes,
             enabled: cx.enabled.clone(),
+            deleted: cx.deleted.clone(),
             debuggee_process_id: self.debuggee_process_id,
             addr,
         };
@@ -78,6 +81,7 @@ impl BreakpointManager {
 
         if bk.get().ref_count == 0 {
             let (addr, bk) = bk.remove_entry();
+            bk.deleted.swap(true, Ordering::Acquire);
             sys::mem::write_process_memory(self.debuggee_process_id, addr, &bk.orig_opcodes)?;
         }
 
@@ -89,6 +93,7 @@ struct BreakpointContext {
     orig_opcodes: [u8; TRAP_OPCODES.len()],
     ref_count: usize,
     enabled: Arc<AtomicBool>,
+    deleted: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
@@ -96,6 +101,7 @@ pub struct Breakpoint {
     pub addr: u64,
     orig_opcodes: [u8; TRAP_OPCODES.len()],
     enabled: Arc<AtomicBool>,
+    deleted: Arc<AtomicBool>,
     debuggee_process_id: u64,
 }
 
@@ -104,8 +110,12 @@ impl Breakpoint {
         self.enabled.load(Ordering::Acquire)
     }
 
+    pub fn deleted(&self) -> bool {
+        self.deleted.load(Ordering::Acquire)
+    }
+
     pub fn enable(&self) -> sys::Result<()> {
-        if !self.enabled() {
+        if !self.enabled() && !self.deleted() {
             sys::mem::write_process_memory(self.debuggee_process_id, self.addr, &TRAP_OPCODES)?;
             self.enabled.swap(true, Ordering::Acquire);
         }
@@ -114,7 +124,7 @@ impl Breakpoint {
     }
 
     pub fn disable(&self) -> sys::Result<()> {
-        if self.enabled() {
+        if self.enabled() & !self.deleted() {
             sys::mem::write_process_memory(
                 self.debuggee_process_id,
                 self.addr,

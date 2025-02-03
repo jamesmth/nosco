@@ -176,7 +176,7 @@ impl Session {
                 self.debug_events.push_back(DebugEvent::Singlestep(thread));
             }
             None => {
-                unreachable!("unknown trap reason");
+                unreachable!("unknown trap reason at {trap_addr:#x}");
             }
         }
 
