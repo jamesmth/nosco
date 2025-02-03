@@ -24,7 +24,7 @@ pub trait EventHandler {
         future::ready(Ok(()))
     }
 
-    /// Function called when a traced function has returned.
+    /// Function called when a function has returned.
     ///
     /// Only the return of functions called within the trace scope are handled.
     /// Check out [Builder::trace_all](super::tracer::Builder::trace_all) and

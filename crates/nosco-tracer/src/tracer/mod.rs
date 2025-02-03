@@ -64,8 +64,8 @@ impl<D: Debugger, H> Tracer<D, H> {
 
     fn start_task(self, session: D::Session) -> TraceTask<D::Session, H> {
         let state = match self.trace_mode {
-            TraceModeConfig::Full { depth } => TraceState::Full(FullTraceState::new(depth)),
-            TraceModeConfig::Scoped(config) => TraceState::Scoped(ScopedTraceState::new(config)),
+            TraceModeConfig::Full { depth } => TraceState::new_full(depth),
+            TraceModeConfig::Scoped(config) => TraceState::new_scoped(config),
         };
 
         TraceTask {
@@ -108,29 +108,18 @@ where
         // previously executed CPU instruction by threads (ID)
         let mut prev_instrs = HashMap::<u64, (u64, CpuInstruction)>::new();
 
-        // breakpoints set on return addresses (when max tracing depth reached)
-        let mut breakpoints_on_ret = HashSet::new();
-
         loop {
             match self.session.wait_event().await.map_err(DebuggerError)? {
                 DebugEvent::Breakpoint(mut thread) => {
                     match prev_instrs.entry(thread.id()) {
                         // breakpoint triggered while single-stepping
                         Entry::Occupied(prev_instr) if *thread.single_step_mut() => {
-                            self.handle_tracee_thread_single_step(
-                                &mut thread,
-                                prev_instr,
-                                &mut breakpoints_on_ret,
-                            )
-                            .await?
+                            self.handle_tracee_thread_single_step(&mut thread, prev_instr)
+                                .await?
                         }
                         Entry::Vacant(prev_instr) => {
-                            self.handle_tracee_thread_breakpoint(
-                                &mut thread,
-                                prev_instr,
-                                &mut breakpoints_on_ret,
-                            )
-                            .await?
+                            self.handle_tracee_thread_breakpoint(&mut thread, prev_instr)
+                                .await?
                         }
                         _ => unreachable!("unexpected tracing state at breakpoint"),
                     }
@@ -142,12 +131,8 @@ where
                         unreachable!("unexpected tracing state at single-step");
                     };
 
-                    self.handle_tracee_thread_single_step(
-                        &mut thread,
-                        prev_instr,
-                        &mut breakpoints_on_ret,
-                    )
-                    .await?;
+                    self.handle_tracee_thread_single_step(&mut thread, prev_instr)
+                        .await?;
 
                     self.session.resume(thread).map_err(DebuggerError)?;
                 }
@@ -174,12 +159,8 @@ where
         &mut self,
         thread: &mut S::StoppedThread,
         prev_instr: VacantEntry<'_, u64, (u64, CpuInstruction)>,
-        breakpoints_on_ret: &mut HashSet<(u64, u64)>,
     ) -> crate::Result<(), S::Error, H::Error> {
-        let is_breakpoint_on_ret = breakpoints_on_ret.remove(&(thread.id(), thread.instr_addr()));
-        let is_fn_to_trace = matches!(self.state, TraceState::Scoped(ref state) if state.is_function_to_trace(thread.instr_addr()));
-
-        let switch_to_singlestep = if is_fn_to_trace {
+        let switch_to_singlestep = if self.state.is_traced_function(thread.instr_addr()) {
             tracing::info!("traced function called");
 
             self.handler
@@ -188,17 +169,40 @@ where
                 .map_err(HandlerError)?;
 
             let max_depth_exceeded = match &mut self.state {
-                TraceState::Full(_) => unreachable!("unexpected tracing mode"),
-                TraceState::Scoped(state) => {
+                TraceState::Full { .. } => unreachable!("unexpected tracing mode"),
+                TraceState::Scoped { state, .. } => {
                     state.register_function_call(thread.id(), thread.instr_addr())
                 }
             };
 
+            if max_depth_exceeded && thread.ret_addr() != 0 {
+                // add breakpoint to return address, even though we don't switch back to
+                // single-step once it returns (we still want to catch the fact that the
+                // function returned)
+
+                let is_first_time = self
+                    .state
+                    .register_breakpoint_on_return(thread.id(), thread.ret_addr());
+
+                if is_first_time {
+                    self.session
+                        .add_breakpoint(thread as &_, thread.ret_addr())
+                        .map_err(DebuggerError)?;
+                }
+            } else if max_depth_exceeded && thread.ret_addr() == 0 {
+                return Err(crate::Error::NullReturnAddress);
+            }
+
             !max_depth_exceeded
-        } else if is_breakpoint_on_ret {
-            self.session
-                .remove_breakpoint(thread as &_, thread.instr_addr())
-                .map_err(DebuggerError)?;
+        } else if let Some(is_registered_once) = self
+            .state
+            .unregister_breakpoint_on_return(thread.id(), thread.instr_addr())
+        {
+            if is_registered_once {
+                self.session
+                    .remove_breakpoint(thread as &_, thread.instr_addr())
+                    .map_err(DebuggerError)?;
+            }
 
             self.handler
                 .function_returned(&mut self.session, thread)
@@ -206,13 +210,13 @@ where
                 .map_err(HandlerError)?;
 
             let depth_is_0 = match &mut self.state {
-                TraceState::Full(state) => state.register_function_return(thread.id()),
-                TraceState::Scoped(state) => state.register_function_return(thread.id()),
+                TraceState::Full { state, .. } => state.register_function_return(thread.id()),
+                TraceState::Scoped { state, .. } => state.register_function_return(thread.id()),
             };
 
             !depth_is_0
         } else {
-            unreachable!("unexpected breakpoint");
+            unreachable!("unexpected breakpoint at {:#x}", thread.instr_addr());
         };
 
         if switch_to_singlestep {
@@ -233,7 +237,6 @@ where
         &mut self,
         thread: &mut S::StoppedThread,
         mut prev_instr: OccupiedEntry<'_, u64, (u64, CpuInstruction)>,
-        breakpoints_on_ret: &mut HashSet<(u64, u64)>,
     ) -> crate::Result<(), S::Error, H::Error> {
         let cur_instr = self
             .session
@@ -255,18 +258,24 @@ where
                 .map_err(HandlerError)?;
 
             let max_depth_exceeded = match &mut self.state {
-                TraceState::Full(state) => state.register_function_call(thread.id()),
-                TraceState::Scoped(state) => {
+                TraceState::Full { state, .. } => state.register_function_call(thread.id()),
+                TraceState::Scoped { state, .. } => {
                     state.register_function_call(thread.id(), thread.instr_addr())
                 }
             };
 
             if max_depth_exceeded && thread.ret_addr() != 0 {
                 // add breakpoint to return address
-                self.session
-                    .add_breakpoint(thread as &_, thread.ret_addr())
-                    .map_err(DebuggerError)?;
-                breakpoints_on_ret.insert((thread.id(), thread.ret_addr()));
+
+                let is_first_time = self
+                    .state
+                    .register_breakpoint_on_return(thread.id(), thread.ret_addr());
+
+                if is_first_time {
+                    self.session
+                        .add_breakpoint(thread as &_, thread.ret_addr())
+                        .map_err(DebuggerError)?;
+                }
             } else if max_depth_exceeded && thread.ret_addr() == 0 {
                 return Err(crate::Error::NullReturnAddress);
             }
@@ -279,8 +288,8 @@ where
                 .map_err(HandlerError)?;
 
             match &mut self.state {
-                TraceState::Full(state) => state.register_function_return(thread.id()),
-                TraceState::Scoped(state) => state.register_function_return(thread.id()),
+                TraceState::Full { state, .. } => state.register_function_return(thread.id()),
+                TraceState::Scoped { state, .. } => state.register_function_return(thread.id()),
             }
         } else {
             false
@@ -314,7 +323,7 @@ where
                     .await
                     .map_err(HandlerError)?;
 
-                if let TraceState::Scoped(ref mut state) = self.state {
+                if let TraceState::Scoped { ref mut state, .. } = self.state {
                     state
                         .register_mapped_binary::<S, H>(&mut self.session, binary)
                         .await?;
@@ -333,7 +342,7 @@ where
                         .map_err(HandlerError)?;
                 }
 
-                if let TraceState::Scoped(ref mut state) = self.state {
+                if let TraceState::Scoped { ref mut state, .. } = self.state {
                     state.register_unmapped_binary(addr);
                 }
 
@@ -348,7 +357,7 @@ where
                     .map_err(HandlerError)?;
 
                 match self.state {
-                    TraceState::Full(ref mut state) => {
+                    TraceState::Full { ref mut state, .. } => {
                         state.register_thread_created(thread.id());
 
                         // enable single-step
@@ -362,7 +371,7 @@ where
 
                         *thread.single_step_mut() = true;
                     }
-                    TraceState::Scoped(ref mut state) => {
+                    TraceState::Scoped { ref mut state, .. } => {
                         state.register_thread_created(thread.id());
                     }
                 }
@@ -382,8 +391,8 @@ where
                         .map_err(HandlerError)?;
 
                     match &mut self.state {
-                        TraceState::Full(state) => state.register_thread_exited(id),
-                        TraceState::Scoped(state) => state.register_thread_exited(id),
+                        TraceState::Full { state, .. } => state.register_thread_exited(id),
+                        TraceState::Scoped { state, .. } => state.register_thread_exited(id),
                     }
 
                     prev_instrs.remove(&id);
@@ -396,15 +405,92 @@ where
 }
 
 enum TraceState {
-    Full(FullTraceState),
-    Scoped(ScopedTraceState),
+    Full {
+        state: FullTraceState,
+        // breakpoints set on return addresses (when max tracing depth reached)
+        breakpoints_on_ret: HashSet<(u64, u64)>,
+    },
+    Scoped {
+        state: ScopedTraceState,
+        // breakpoints set on return addresses (when max tracing depth reached)
+        breakpoints_on_ret: HashMap<(u64, u64), usize>,
+    },
 }
 
 impl TraceState {
+    fn new_full(max_depth: usize) -> Self {
+        Self::Full {
+            state: FullTraceState::new(max_depth),
+            breakpoints_on_ret: HashSet::new(),
+        }
+    }
+
+    fn new_scoped(config: ScopedTraceConfig) -> Self {
+        Self::Scoped {
+            state: ScopedTraceState::new(config),
+            breakpoints_on_ret: HashMap::new(),
+        }
+    }
+
+    fn is_traced_function(&self, addr: u64) -> bool {
+        match self {
+            Self::Full { .. } => false,
+            Self::Scoped { state, .. } => state.is_function_to_trace(addr),
+        }
+    }
+
+    /// Returns whether this is the first time a breakpoint on the return
+    /// address is registered.
+    fn register_breakpoint_on_return(&mut self, thread_id: u64, ret_addr: u64) -> bool {
+        match self {
+            Self::Full {
+                breakpoints_on_ret, ..
+            } => {
+                breakpoints_on_ret.insert((thread_id, ret_addr));
+                true
+            }
+            Self::Scoped {
+                breakpoints_on_ret, ..
+            } => {
+                let count = breakpoints_on_ret.entry((thread_id, ret_addr)).or_default();
+                *count += 1;
+                *count == 1
+            }
+        }
+    }
+
+    /// If a breakpoint was previously registered on the return address, it
+    /// returns whether it was registered only once.
+    fn unregister_breakpoint_on_return(&mut self, thread_id: u64, ret_addr: u64) -> Option<bool> {
+        match self {
+            Self::Full {
+                breakpoints_on_ret, ..
+            } => breakpoints_on_ret
+                .remove(&(thread_id, ret_addr))
+                .then_some(true),
+            Self::Scoped {
+                breakpoints_on_ret, ..
+            } => match breakpoints_on_ret.entry((thread_id, ret_addr)) {
+                Entry::Occupied(mut e) => {
+                    let count = e.get_mut();
+                    *count -= 1;
+
+                    let is_registered_once = *count == 0;
+                    if is_registered_once {
+                        e.remove();
+                    }
+
+                    Some(is_registered_once)
+                }
+                Entry::Vacant(_) => None,
+            },
+        }
+    }
+
     const fn label(&self) -> &str {
         match self {
-            Self::Full(_) => "full",
-            Self::Scoped(_) => "scoped",
+            Self::Full { .. } => "full",
+            Self::Scoped { .. } => "scoped",
         }
     }
 }
