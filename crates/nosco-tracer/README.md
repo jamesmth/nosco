@@ -3,7 +3,7 @@ nosco-tracer
 
 [<img alt="version" src="https://img.shields.io/crates/v/nosco-tracer.svg?style=for-the-badge&color=fc8d62&logo=rust" height="18">](https://crates.io/crates/nosco-tracer)
 [<img alt="doc" src="https://img.shields.io/badge/docs.rs-nosco--tracer-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="18">](https://docs.rs/nosco-tracer)
-[<img alt="msrv" src="https://img.shields.io/crates/msrv/nosco-tracer.svg?style=for-the-badge&color=lightgray" height="18">](https://blog.rust-lang.org/2024/08/08/Rust-1.80.1.html)
+[<img alt="msrv" src="https://img.shields.io/crates/msrv/nosco-tracer.svg?style=for-the-badge&color=lightgray" height="18">](https://blog.rust-lang.org/2024/10/17/Rust-1.82.0.html)
 
 This crate allows to spawn a process and trace its execution.
 

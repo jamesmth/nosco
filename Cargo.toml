@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 version = "0.0.0-reserved"
-rust-version = "1.80.1"
+rust-version = "1.82.0"
 authors = ["James Smith <jamesmth@proton.me>"]
 categories = ["development-tools::debugging"]
 edition = "2021"

@@ -84,7 +84,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: ["1.80.1", "stable"]
+        toolchain: ["1.82.0", "stable"]
     steps:
       - uses: ilammy/setup-nasm@v1
       - uses: egor-tensin/setup-gcc@v1
