@@ -17,10 +17,9 @@ Two main components are provided:
 # Basic Usage
 
 ```rust
-use std::process::Command;
-
 use nosco_debugger::{Debugger, Session};
 
+use nosco_tracer::Command;
 use nosco_tracer::debugger::DebugSession;
 use nosco_tracer::handler::EventHandler;
 use nosco_tracer::tracer::Tracer;
@@ -34,12 +33,8 @@ async fn main() {
         .trace_all(3)
         .build();
 
-    // initialize the process to trace
-    let mut cmd = Command::new("ls");
-    cmd.arg("/");
-
     // spawn the process to trace
-    let process = tracer.spawn(cmd).await.unwrap();
+    let (process, _) = tracer.spawn(Command::new("ls").arg("/")).await.unwrap();
 
     // wait for the traced process to exit
     let exit_code = process.resume_and_trace().await.unwrap();

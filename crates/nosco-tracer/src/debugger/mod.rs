@@ -3,10 +3,10 @@ mod thread;
 
 use std::future::Future;
 
-use tokio::process::{Child, Command};
-
 pub use self::binary::{BinaryInformation, BinaryView};
 pub use self::thread::Thread;
+use crate::tracer::TracedProcessStdio;
+use crate::Command;
 
 /// Trait implementing the spawning logic of a debugger.
 pub trait Debugger {
@@ -21,8 +21,8 @@ pub trait Debugger {
     /// The process is spawned in a **suspended** state.
     fn spawn(
         &mut self,
-        command: &mut Command,
-    ) -> impl Future<Output = Result<(Self::Session, Child), Self::Error>>;
+        command: Command,
+    ) -> impl Future<Output = Result<(Self::Session, TracedProcessStdio), Self::Error>>;
 }
 
 /// Trait implementing the instrumentation logic of a debugger.

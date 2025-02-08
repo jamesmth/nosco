@@ -15,7 +15,7 @@ capstone = { workspace = true }
 indexmap = { workspace = true }
 nosco-tracer = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["process"] }
+tokio = { workspace = true }
 tracing = { workspace = true }
 wholesym = { workspace = true }
 
@@ -23,9 +23,9 @@ wholesym = { workspace = true }
 byteorder = { workspace = true }
 futures-util = { workspace = true }
 goblin = { workspace = true, features = ["std", "elf32", "elf64", "endian_fd"] }
-nix = { workspace = true, features = ["mman", "ptrace"] }
+nix = { workspace = true, features = ["fs", "mman", "ptrace"] }
 scroll = { workspace = true }
-tokio = { workspace = true, features = ["fs", "io-util", "process"] }
+tokio = { workspace = true, features = ["fs", "io-util"] }
 tokio-stream = { workspace = true, features = ["fs"] }
 tokio-util = { workspace = true, features = ["codec"] }
 

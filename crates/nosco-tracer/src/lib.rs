@@ -15,10 +15,9 @@
 //! logic for handling execution events from a spawned process.
 //!
 //! ```no_run
-//! use std::process::Command;
-//!
 //! use nosco_debugger::{Debugger, Session};
 //!
+//! use nosco_tracer::Command;
 //! use nosco_tracer::debugger::DebugSession;
 //! use nosco_tracer::handler::EventHandler;
 //! use nosco_tracer::tracer::Tracer;
@@ -32,12 +31,8 @@
 //!         .trace_all(3)
 //!         .build();
 //!
-//!     // initialize the process to trace
-//!     let mut cmd = Command::new("ls");
-//!     cmd.arg("/");
-//!
 //!     // spawn the process to trace
-//!     let process = tracer.spawn(cmd).await.unwrap();
+//!     let (process, _) = tracer.spawn(Command::new("ls").arg("/")).await.unwrap();
 //!
 //!     // wait for the traced process to exit
 //!     let exit_code = process.resume_and_trace().await.unwrap();
@@ -82,6 +77,7 @@
 /// Module containing traits for implementing a custom debugger.
 pub mod debugger;
 
+mod command;
 mod error;
 
 /// Module containing traits for handling trace events.
@@ -90,4 +86,5 @@ pub mod handler;
 /// Module implementing the process tracer.
 pub mod tracer;
 
+pub use self::command::{Command, CommandEnv};
 pub use self::error::{Error, Result};

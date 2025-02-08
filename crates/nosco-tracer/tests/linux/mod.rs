@@ -108,8 +108,8 @@ async fn recursive_ret_breakpoint() {
         .scope(tracee_name, "foo", 0)
         .build();
 
-    let tracee = tracer
-        .spawn(std::process::Command::new(&tracee_path))
+    let (tracee, _) = tracer
+        .spawn(nosco_tracer::Command::new(&tracee_path))
         .await
         .expect("spawn");
 
@@ -146,15 +146,15 @@ pub async fn test_trace_hello(is_64bit: bool, is_pie: bool, is_static: bool) {
         .scope(tracee_name, "main", 1)
         .build();
 
-    let mut tracee = tracer
-        .spawn(std::process::Command::new(&tracee_path))
+    let (tracee, tracee_stdio) = tracer
+        .spawn(nosco_tracer::Command::new(&tracee_path))
         .await
         .expect("spawn");
 
-    let mut stdout = tracee.stdout().expect("stdout");
-
     let exit_code = tracee.resume_and_trace().await.expect("run");
     assert_eq!(exit_code, 0);
+
+    let mut stdout = tokio::process::ChildStdout::from_std(tracee_stdio.stdout).expect("stdout");
 
     let mut output = String::new();
     stdout
@@ -194,8 +194,8 @@ pub async fn test_trace_dlopen(is_64bit: bool, is_pie: bool, is_static: bool) {
         .scope(tracee_name, "main", 1)
         .build();
 
-    let tracee = tracer
-        .spawn(std::process::Command::new(&tracee_path))
+    let (tracee, _) = tracer
+        .spawn(nosco_tracer::Command::new(&tracee_path))
         .await
         .expect("spawn");
 

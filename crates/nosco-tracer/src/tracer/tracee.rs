@@ -1,4 +1,4 @@
-use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
+use std::process::{ChildStderr, ChildStdin, ChildStdout};
 
 use super::TraceTask;
 use crate::debugger::DebugSession;
@@ -7,45 +7,11 @@ use crate::handler::EventHandler;
 /// Suspended process ready to be resumed and traced.
 pub struct TracedProcess<S: DebugSession, H> {
     trace_task: TraceTask<S, H>,
-    child: Option<Child>,
 }
 
 impl<S: DebugSession, H> TracedProcess<S, H> {
-    pub(super) const fn new(trace_task: TraceTask<S, H>, child: Option<Child>) -> Self {
-        Self { trace_task, child }
-    }
-
-    /// The handle for reading from the standard output (stdout) of the traced
-    /// process, if it has been captured.
-    ///
-    /// # Note
-    ///
-    /// You may want to call this function before calling [resume_and_trace](Self::resume_and_trace),
-    /// so that you can read the tracee's stdout while it is running.
-    pub fn stdout(&mut self) -> Option<ChildStdout> {
-        self.child.as_mut().and_then(|child| child.stdout.take())
-    }
-
-    /// The handle for reading from the standard error (stderr) of the traced
-    /// process, if it has been captured.
-    ///
-    /// # Note
-    ///
-    /// You may want to call this function before calling [resume_and_trace](Self::resume_and_trace),
-    /// so that you can read the tracee's stderr while it is running.
-    pub fn stderr(&mut self) -> Option<ChildStderr> {
-        self.child.as_mut().and_then(|child| child.stderr.take())
-    }
-
-    /// The handle for writing to the standard input (stdin), of the traced
-    /// process, if it has been captured.
-    ///
-    /// # Note
-    ///
-    /// You may want to call this function before calling [resume_and_trace](Self::resume_and_trace),
-    /// so that you can write to the tracee's stdin while it is running.
-    pub fn stdin(&mut self) -> Option<ChildStdin> {
-        self.child.as_mut().and_then(|child| child.stdin.take())
+    pub(super) const fn new(trace_task: TraceTask<S, H>) -> Self {
+        Self { trace_task }
     }
 }
 
@@ -63,4 +29,22 @@ where
     pub async fn resume_and_trace(self) -> crate::Result<i32, S::Error, H::Error> {
         self.trace_task.run().await
     }
+}
+
+/// Standard I/O stream for the traced process.
+pub struct TracedProcessStdio {
+    /// Process ID of the traced process.
+    pub process_id: u64,
+
+    /// The handle for writing to the standard input (stdin), of the traced
+    /// process.
+    pub stdin: ChildStdin,
+
+    /// The handle for reading from the standard output (stdout) of the traced
+    /// process.
+    pub stdout: ChildStdout,
+
+    /// The handle for reading from the standard error (stderr) of the traced
+    /// process.
+    pub stderr: ChildStderr,
 }

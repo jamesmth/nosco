@@ -4,21 +4,19 @@ mod tracee;
 
 use std::collections::hash_map::{Entry, OccupiedEntry, VacantEntry};
 use std::collections::{HashMap, HashSet};
-use std::process::Command as StdCommand;
-
-use tokio::process::Command;
 
 use tracing::Instrument;
 
 pub use self::builder::Builder;
 use self::builder::NeedsDebugger;
 use self::state::{FullTraceState, ScopedTraceConfig, ScopedTraceState};
-pub use self::tracee::TracedProcess;
+pub use self::tracee::{TracedProcess, TracedProcessStdio};
 use crate::debugger::{BinaryInformation, DebugEvent, DebugStateChange, Debugger};
 use crate::debugger::{CpuInstruction, CpuInstructionType};
 use crate::debugger::{DebugSession, Thread};
 use crate::error::{DebuggerError, HandlerError};
 use crate::handler::EventHandler;
+use crate::Command;
 
 /// Process tracer.
 pub struct Tracer<D, H> {
@@ -47,19 +45,18 @@ impl<D: Debugger, H> Tracer<D, H> {
     /// The spawned process (tracee) is suspended until [resume_and_trace](TracedProcess::resume_and_trace)
     /// is called.
     #[tracing::instrument(name = "Spawn", skip(self))]
+    #[allow(clippy::type_complexity)]
     pub async fn spawn(
         mut self,
-        command: StdCommand,
-    ) -> Result<TracedProcess<D::Session, H>, D::Error> {
-        let mut command: Command = command.into();
+        command: Command,
+    ) -> Result<(TracedProcess<D::Session, H>, TracedProcessStdio), D::Error> {
+        let (session, stdio) = self.debugger.spawn(command).await?;
 
-        let (session, child) = self.debugger.spawn(&mut command).await?;
-
-        tracing::info!(tracee_pid = ?child.id(), "spawned");
+        tracing::info!(tracee_pid = stdio.process_id, "spawned");
 
         let task = self.start_task(session);
 
-        Ok(TracedProcess::new(task, Some(child)))
+        Ok((TracedProcess::new(task), stdio))
     }
 
     fn start_task(self, session: D::Session) -> TraceTask<D::Session, H> {

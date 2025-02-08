@@ -1,4 +1,5 @@
-use tokio::process::{Child, Command};
+use nosco_tracer::tracer::TracedProcessStdio;
+use nosco_tracer::Command;
 
 use super::session::Session;
 use crate::sys;
@@ -24,12 +25,12 @@ impl nosco_tracer::debugger::Debugger for Debugger {
 
     async fn spawn(
         &mut self,
-        command: &mut Command,
-    ) -> Result<(Self::Session, Child), Self::Error> {
-        let (main_thread_id, child) = sys::spawn_debuggee(command).await?;
+        command: Command,
+    ) -> Result<(Self::Session, TracedProcessStdio), Self::Error> {
+        let debuggee_stdio = sys::spawn_debuggee(command).await?;
 
-        let session = Session::init(main_thread_id, &[]).await?;
+        let session = Session::init(debuggee_stdio.process_id, &[]).await?;
 
-        Ok((session, child))
+        Ok((session, debuggee_stdio))
     }
 }

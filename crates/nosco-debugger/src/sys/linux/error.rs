@@ -53,6 +53,12 @@ pub enum Error {
 
     #[error(transparent)]
     FromBytesWithNul(#[from] std::ffi::FromBytesWithNulError),
+
+    #[error(transparent)]
+    InteriorNulByte(#[from] std::ffi::NulError),
+
+    #[error("Child process execution failed: {0}")]
+    ChildExec(std::io::Error),
 }
 
 /// Result type of this crate.
