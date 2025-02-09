@@ -10,6 +10,7 @@ use super::breakpoint::BreakpointManager;
 use super::thread::ThreadManager;
 use super::DebugStop;
 use crate::sys;
+use crate::sys::process::TracedProcessHandle;
 
 #[cfg(target_arch = "aarch64")]
 const MAX_OPCODES_LEN: usize = 4;
@@ -35,7 +36,10 @@ pub struct Session {
 
 impl Session {
     #[tracing::instrument(name = "DebugSessionInit", skip_all)]
-    pub(super) async fn init(main_thread_id: u64, other_thread_ids: &[u64]) -> crate::Result<Self> {
+    pub(super) async fn init(
+        debuggee_handle: TracedProcessHandle,
+        other_thread_ids: &[u64],
+    ) -> crate::Result<Self> {
         let disass = if cfg!(target_arch = "x86_64") {
             capstone::Capstone::new()
                 .x86()
@@ -50,12 +54,14 @@ impl Session {
             unimplemented!("bad arch")
         };
 
-        let mut breakpoint_manager = BreakpointManager::new(main_thread_id);
+        let mut breakpoint_manager = BreakpointManager::new(debuggee_handle.raw_id());
 
         let mut debug_events = VecDeque::new();
 
+        let main_thread_id = debuggee_handle.raw_id();
+
         let session = sys::Session::init(
-            main_thread_id,
+            debuggee_handle,
             other_thread_ids,
             SessionCx::new(&mut breakpoint_manager, &mut debug_events),
         )
@@ -244,6 +250,10 @@ impl DebugSession for Session {
                 }
             }
         }
+    }
+
+    fn process_id(&self) -> u64 {
+        self.inner.process_id()
     }
 
     fn add_breakpoint<'a>(

@@ -44,6 +44,9 @@ impl<D: Debugger, H> Tracer<D, H> {
     ///
     /// The spawned process (tracee) is suspended until [resume_and_trace](TracedProcess::resume_and_trace)
     /// is called.
+    ///
+    /// If the returned [`TracedProcess`] is dropped, a kill operation is invoked
+    /// on the spawned process.
     #[tracing::instrument(name = "Spawn", skip(self))]
     #[allow(clippy::type_complexity)]
     pub async fn spawn(
@@ -52,7 +55,7 @@ impl<D: Debugger, H> Tracer<D, H> {
     ) -> Result<(TracedProcess<D::Session, H>, TracedProcessStdio), D::Error> {
         let (session, stdio) = self.debugger.spawn(command).await?;
 
-        tracing::info!(tracee_pid = stdio.process_id, "spawned");
+        tracing::info!(tracee_pid = session.process_id(), "spawned");
 
         let task = self.start_task(session);
 

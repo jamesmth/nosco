@@ -1,5 +1,6 @@
 mod error;
 pub mod mem;
+pub mod process;
 mod session;
 pub mod thread;
 
@@ -15,6 +16,7 @@ use nosco_tracer::tracer::TracedProcessStdio;
 use nosco_tracer::Command;
 
 pub use self::error::{Error, Result};
+use self::process::TracedProcessHandle;
 pub use self::session::Session;
 pub use crate::common::binary::MappedBinary;
 
@@ -23,7 +25,9 @@ pub use crate::common::binary::MappedBinary;
 /// # Note
 ///
 /// The process is spawned in debug-mode.
-pub async fn spawn_debuggee(command: Command) -> crate::sys::Result<TracedProcessStdio> {
+pub async fn spawn_debuggee(
+    command: Command,
+) -> crate::sys::Result<(TracedProcessHandle, TracedProcessStdio)> {
     let program = CString::new(command.program.into_os_string().into_vec())?;
 
     let args = command
@@ -92,12 +96,15 @@ pub async fn spawn_debuggee(command: Command) -> crate::sys::Result<TracedProces
 
     imp::wait_for_thread_ready(pid)?;
 
-    Ok(TracedProcessStdio {
-        process_id: pid.as_raw() as u64,
+    let handle = TracedProcessHandle::new(pid, true);
+
+    let stdio = TracedProcessStdio {
         stdin: parent_stdin.into(),
         stdout: parent_stdout.into(),
         stderr: parent_stderr.into(),
-    })
+    };
+
+    Ok((handle, stdio))
 }
 
 mod imp {

@@ -21,13 +21,14 @@ use wholesym::{SymbolManager, SymbolManagerConfig};
 pub use self::rdebug::LinkMap;
 use self::rdebug::RDebug;
 use super::mem;
+use super::process::TracedProcessHandle;
 use crate::common::binary::MappedBinary;
 use crate::common::session::SessionCx;
 use crate::common::DebugStop;
 
 pub struct Session {
-    /// Debuggee PID.
-    pid: Pid,
+    /// Debuggee handle.
+    debuggee_handle: TracedProcessHandle,
 
     /// RDebug context of the debuggee.
     rdebug_cx: RDebugContext,
@@ -48,15 +49,13 @@ pub struct Session {
 impl Session {
     /// Initializes a new debug session with the given process ID.
     pub async fn init(
-        main_thread_id: u64,
+        debuggee_handle: TracedProcessHandle,
         _thread_pids: &[u64],
         mut session_cx: SessionCx<'_>,
     ) -> crate::sys::Result<Self> {
-        let debuggee_pid = Pid::from_raw(main_thread_id as i32);
-
         let symbol_manager = Arc::new(SymbolManager::with_config(SymbolManagerConfig::default()));
 
-        let mut scan = self::elf::scan_debuggee_exe(debuggee_pid).await?;
+        let mut scan = self::elf::scan_debuggee_exe(debuggee_handle.id()).await?;
 
         scan.lms
             .iter()
@@ -67,7 +66,7 @@ impl Session {
         let rdebug_cx = RDebugContext::init(
             scan.rdebug_addr_loc,
             scan.rdebug_addr,
-            debuggee_pid,
+            debuggee_handle.id(),
             scan.elf_ctx,
             &mut session_cx,
         )?;
@@ -79,7 +78,7 @@ impl Session {
         }
 
         Ok(Session {
-            pid: debuggee_pid,
+            debuggee_handle,
             rdebug_cx,
             link_map: scan.lms,
             symbol_manager,
@@ -126,7 +125,7 @@ impl Session {
 
         tracing::debug!("internal watchpoint (r_debug) triggered");
 
-        self::watchpoint::remove_hardware_watchpoint(self.pid)?;
+        self::watchpoint::remove_hardware_watchpoint(self.debuggee_handle.id())?;
 
         let (rdebug_addr_loc, rdebug_addr, elf_ctx) = match self.rdebug_cx {
             RDebugContext::Uninit {
@@ -139,7 +138,8 @@ impl Session {
                 rdebug_addr_loc,
                 elf_ctx,
             } => {
-                let mut rdebug_addr = ptrace::read(self.pid, rdebug_addr_loc as *mut _)? as u64;
+                let mut rdebug_addr =
+                    ptrace::read(self.debuggee_handle.id(), rdebug_addr_loc as *mut _)? as u64;
 
                 if !elf_ctx.is_big() {
                     rdebug_addr &= 0xffffffff;
@@ -153,7 +153,7 @@ impl Session {
         self.rdebug_cx = RDebugContext::init(
             rdebug_addr_loc,
             rdebug_addr,
-            self.pid,
+            self.debuggee_handle.id(),
             elf_ctx,
             &mut session_cx,
         )?;
@@ -162,11 +162,11 @@ impl Session {
     }
 
     pub fn read_memory(&self, addr: u64, buf: &mut [u8]) -> crate::sys::Result<()> {
-        self::mem::read_process_memory(self.pid.as_raw() as u64, addr, buf)
+        self::mem::read_process_memory(self.debuggee_handle.raw_id(), addr, buf)
     }
 
     pub fn write_memory(&self, addr: u64, buf: &[u8]) -> crate::sys::Result<()> {
-        self::mem::write_process_memory(self.pid.as_raw() as u64, addr, buf)
+        self::mem::write_process_memory(self.debuggee_handle.raw_id(), addr, buf)
     }
 
     /// Returns the binary context (size, endianness) of the debuggee.
@@ -174,9 +174,13 @@ impl Session {
         self.elf_ctx
     }
 
+    pub const fn process_id(&self) -> u64 {
+        self.debuggee_handle.raw_id()
+    }
+
     pub async fn wait_for_debug_stop(&mut self) -> crate::sys::Result<DebugStop> {
         // FIXME: this action blocks the async runtime
-        let status = waitpid(self.pid, None)?;
+        let status = waitpid(self.debuggee_handle.id(), None)?;
 
         let stop = match status {
             WaitStatus::Stopped(pid, Signal::SIGTRAP) => DebugStop::Trap {

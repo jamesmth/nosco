@@ -42,6 +42,9 @@ pub trait DebugSession {
     /// Returns the next debug event.
     fn wait_event(&mut self) -> impl Future<Output = Result<DebugEvent<Self>, Self::Error>>;
 
+    /// Debuggee's process ID.
+    fn process_id(&self) -> u64;
+
     /// Reads a single CPU instruction from the debuggee's address space.
     fn read_cpu_instruction(&self, addr: u64) -> Result<CpuInstruction, Self::Error>;
 

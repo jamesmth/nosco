@@ -27,9 +27,9 @@ impl nosco_tracer::debugger::Debugger for Debugger {
         &mut self,
         command: Command,
     ) -> Result<(Self::Session, TracedProcessStdio), Self::Error> {
-        let debuggee_stdio = sys::spawn_debuggee(command).await?;
+        let (debuggee_handle, debuggee_stdio) = sys::spawn_debuggee(command).await?;
 
-        let session = Session::init(debuggee_stdio.process_id, &[]).await?;
+        let session = Session::init(debuggee_handle, &[]).await?;
 
         Ok((session, debuggee_stdio))
     }

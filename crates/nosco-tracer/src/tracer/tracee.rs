@@ -33,9 +33,6 @@ where
 
 /// Standard I/O stream for the traced process.
 pub struct TracedProcessStdio {
-    /// Process ID of the traced process.
-    pub process_id: u64,
-
     /// The handle for writing to the standard input (stdin), of the traced
     /// process.
     pub stdin: ChildStdin,
