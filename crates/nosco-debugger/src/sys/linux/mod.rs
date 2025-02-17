@@ -28,12 +28,14 @@ pub use crate::common::binary::MappedBinary;
 pub async fn spawn_debuggee(
     command: Command,
 ) -> crate::sys::Result<(TracedProcessHandle, TracedProcessStdio)> {
-    let program = CString::new(command.program.into_os_string().into_vec())?;
-
-    let args = command
-        .args
+    let args = Some(CString::new(command.program.into_os_string().into_vec()))
         .into_iter()
-        .map(|arg| CString::new(arg.into_bytes()))
+        .chain(
+            command
+                .args
+                .into_iter()
+                .map(|arg| CString::new(arg.into_bytes())),
+        )
         .collect::<std::result::Result<Vec<_>, NulError>>()?;
 
     let env = command
@@ -88,7 +90,7 @@ pub async fn spawn_debuggee(
                 }
             }
 
-            let Err(e) = execvp(&program, &args);
+            let Err(e) = execvp(&args[0], &args);
 
             unsafe { nix::libc::exit(e as i32) }
         }
