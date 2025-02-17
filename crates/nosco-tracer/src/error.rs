@@ -25,7 +25,7 @@ pub enum Error<E1, E2> {
 
     /// The debugger didn't compute the return address of a function.
     #[error("Debugger didn't compute a return address")]
-    NullReturnAddress,
+    NoReturnAddress,
 }
 
 /// Result type of this crate.

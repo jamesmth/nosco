@@ -175,22 +175,27 @@ where
                 }
             };
 
-            if max_depth_exceeded && thread.ret_addr() != 0 {
+            if max_depth_exceeded {
                 // add breakpoint to return address, even though we don't switch back to
                 // single-step once it returns (we still want to catch the fact that the
                 // function returned)
 
+                let mut regs = self.session.get_registers(thread).map_err(DebuggerError)?;
+                let ret_addr = self
+                    .session
+                    .compute_return_address(thread, &mut regs)
+                    .map_err(DebuggerError)?
+                    .ok_or(crate::Error::NoReturnAddress)?;
+
                 let is_first_time = self
                     .state
-                    .register_breakpoint_on_return(thread.id(), thread.ret_addr());
+                    .register_breakpoint_on_return(thread.id(), ret_addr);
 
                 if is_first_time {
                     self.session
-                        .add_breakpoint(thread as &_, thread.ret_addr())
+                        .add_breakpoint(thread as &_, ret_addr)
                         .map_err(DebuggerError)?;
                 }
-            } else if max_depth_exceeded && thread.ret_addr() == 0 {
-                return Err(crate::Error::NullReturnAddress);
             }
 
             !max_depth_exceeded
@@ -264,20 +269,25 @@ where
                 }
             };
 
-            if max_depth_exceeded && thread.ret_addr() != 0 {
+            if max_depth_exceeded {
                 // add breakpoint to return address
+
+                let mut regs = self.session.get_registers(thread).map_err(DebuggerError)?;
+                let ret_addr = self
+                    .session
+                    .compute_return_address(thread, &mut regs)
+                    .map_err(DebuggerError)?
+                    .ok_or(crate::Error::NoReturnAddress)?;
 
                 let is_first_time = self
                     .state
-                    .register_breakpoint_on_return(thread.id(), thread.ret_addr());
+                    .register_breakpoint_on_return(thread.id(), ret_addr);
 
                 if is_first_time {
                     self.session
-                        .add_breakpoint(thread as &_, thread.ret_addr())
+                        .add_breakpoint(thread as &_, ret_addr)
                         .map_err(DebuggerError)?;
                 }
-            } else if max_depth_exceeded && thread.ret_addr() == 0 {
-                return Err(crate::Error::NullReturnAddress);
             }
 
             max_depth_exceeded

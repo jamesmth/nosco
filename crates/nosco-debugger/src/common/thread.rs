@@ -28,7 +28,6 @@ impl ThreadManager {
         StoppedThread {
             id: thread_id,
             instr_addr: 0,
-            ret_addr: 0,
             single_step: state.single_step,
             stepped_over: state.stepping_over.clone(),
             stopped_by: None,
@@ -67,7 +66,6 @@ impl ThreadManager {
         self.threads.get(&thread_id).map(|state| StoppedThread {
             id: thread_id,
             instr_addr: 0,
-            ret_addr: 0,
             single_step: state.single_step,
             stepped_over: state.stepping_over.clone(),
             stopped_by: stopped_by.map(|bk| {
@@ -110,9 +108,6 @@ pub struct StoppedThread {
     /// Thread's instruction address.
     pub(super) instr_addr: u64,
 
-    /// Thread's return address.
-    pub(super) ret_addr: u64,
-
     /// Whether the thread is in single-step mode.
     pub(super) single_step: bool,
 
@@ -138,10 +133,6 @@ impl nosco_tracer::debugger::Thread for StoppedThread {
 
     fn instr_addr(&self) -> u64 {
         self.instr_addr
-    }
-
-    fn ret_addr(&self) -> u64 {
-        self.ret_addr
     }
 
     fn single_step_mut(&mut self) -> &mut bool {

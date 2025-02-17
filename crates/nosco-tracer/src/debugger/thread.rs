@@ -9,9 +9,6 @@ pub trait Thread {
     /// Returns the thread's instruction address.
     fn instr_addr(&self) -> u64;
 
-    /// Returns the thread's return address.
-    fn ret_addr(&self) -> u64;
-
     /// Returns a mutable reference over the single-step state
     /// of the thread.
     fn single_step_mut(&mut self) -> &mut bool;

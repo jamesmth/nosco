@@ -67,6 +67,18 @@ pub trait DebugSession {
         regs: Self::Registers,
     ) -> Result<(), Self::Error>;
 
+    /// Computes the return address of the given stopped thread.
+    ///
+    /// # Note
+    ///
+    /// On some CPU architectures (e.g., ARM), this function can directly
+    /// retrieve the return address from the thread's registers.
+    fn compute_return_address(
+        &self,
+        thread: &Self::StoppedThread,
+        regs: &mut Self::Registers,
+    ) -> Result<Option<u64>, Self::Error>;
+
     /// Adds a breakpoint at the given address of the debuggee's address space,
     ///
     /// If `thread` is specified, the breakpoint is added for a **single
@@ -109,7 +121,14 @@ pub trait Registers {
     fn instr_addr_mut(&mut self) -> &mut u64;
 
     /// Returns a mutable reference over the return address.
-    fn ret_addr_mut(&mut self) -> &mut u64;
+    ///
+    /// # Note
+    ///
+    /// On some CPU architectures (e.g, x86), the return address cannot be
+    /// directly retrieved from the registers. In this case,
+    /// [`compute_return_address`](DebugSession::compute_return_address)
+    /// should be called instead.
+    fn ret_addr_mut(&mut self) -> &mut Option<u64>;
 }
 
 /// Event describing some action taking place within the debuggee.

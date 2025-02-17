@@ -77,12 +77,10 @@ impl Session {
             .into_iter()
             .chain(other_thread_ids.iter().copied())
         {
-            let mut regs =
-                get_thread_registers(&session, thread_id, &disass, session.binary_ctx())?;
+            let mut regs = get_thread_registers(thread_id)?;
 
             let mut thread = thread_manager.register_thread_create(thread_id);
             thread.instr_addr = *regs.instr_addr_mut();
-            thread.ret_addr = *regs.ret_addr_mut();
 
             let event = DebugEvent::StateInit(DebugStateChange::ThreadCreated(thread));
             debug_events.push_back(event);
@@ -121,12 +119,7 @@ impl Session {
         }
 
         // retrieve the associated breakpoint (if enabled)
-        let mut regs = get_thread_registers(
-            &self.inner,
-            thread_id,
-            &self.disass,
-            self.inner.binary_ctx(),
-        )?;
+        let mut regs = get_thread_registers(thread_id)?;
         let trap_addr = *regs.instr_addr_mut() - super::breakpoint::TRAP_OPCODES.len() as u64;
         let breakpoint = self
             .breakpoint_manager
@@ -145,8 +138,6 @@ impl Session {
         match thread.stopped_by.as_ref() {
             // the thread has triggered a breakpoint
             Some((is_breakpoint_of_thread, breakpoint)) => {
-                let ret_addr = *regs.ret_addr_mut();
-
                 // rewind the instruction pointer
                 *regs.instr_addr_mut() = breakpoint.addr;
                 self.set_registers(&thread, regs)?;
@@ -160,7 +151,6 @@ impl Session {
 
                 if *is_breakpoint_of_thread {
                     thread.instr_addr = breakpoint.addr;
-                    thread.ret_addr = ret_addr;
 
                     // we don't want the tracer to see the trap instruction
                     breakpoint.disable()?;
@@ -178,7 +168,6 @@ impl Session {
             // the thread has most likely single-stepped
             None if thread.single_step => {
                 thread.instr_addr = *regs.instr_addr_mut();
-                thread.ret_addr = *regs.ret_addr_mut();
                 self.debug_events.push_back(DebugEvent::Singlestep(thread));
             }
             None => {
@@ -209,16 +198,10 @@ impl DebugSession for Session {
                     self.handle_trap(thread_id)?;
                 }
                 DebugStop::ThreadCreated { thread_id } => {
-                    let mut regs = get_thread_registers(
-                        &self.inner,
-                        thread_id,
-                        &self.disass,
-                        self.inner.binary_ctx(),
-                    )?;
+                    let mut regs = get_thread_registers(thread_id)?;
 
                     let mut thread = self.thread_manager.register_thread_create(thread_id);
                     thread.instr_addr = *regs.instr_addr_mut();
-                    thread.ret_addr = *regs.ret_addr_mut();
 
                     self.debug_events.push_back(DebugEvent::StateUpdate {
                         thread_id,
@@ -327,12 +310,7 @@ impl DebugSession for Session {
         &mut self,
         thread: &Self::StoppedThread,
     ) -> Result<Self::Registers, Self::Error> {
-        get_thread_registers(
-            &self.inner,
-            thread.id(),
-            &self.disass,
-            self.inner.binary_ctx(),
-        )
+        get_thread_registers(thread.id())
     }
 
     fn set_registers(
@@ -340,7 +318,79 @@ impl DebugSession for Session {
         thread: &Self::StoppedThread,
         regs: Self::Registers,
     ) -> Result<(), Self::Error> {
-        set_thread_registers(thread.id(), regs)
+        sys::thread::set_thread_registers(thread.id(), regs).map_err(Into::into)
+    }
+
+    fn compute_return_address(
+        &self,
+        _thread: &Self::StoppedThread,
+        regs: &mut Self::Registers,
+    ) -> Result<Option<u64>, Self::Error> {
+        if let Some(ret_addr) = *regs.ret_addr_mut() {
+            return Ok(Some(ret_addr));
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            Ok(*regs.ret_addr_mut())
+        }
+
+        #[cfg(target_arch = "x86_64")]
+        {
+            //
+            // Retrieve the current return address with naive heuristics.
+            //
+
+            let filter_has_call_at_addr = |ret_addr: u64| -> Option<u64> {
+                let prev_addr = ret_addr.checked_sub(MAX_OPCODES_LEN as u64)?;
+
+                let mut buf = [0u8; MAX_OPCODES_LEN];
+                self.read_memory(prev_addr, &mut buf).ok()?;
+
+                for i in (0..(buf.len() - 3)).rev() {
+                    let addr = prev_addr + i as u64;
+                    let Ok(asm) = self.disass.disasm_count(&buf[i..], addr, 1) else {
+                        continue;
+                    };
+
+                    if matches!(asm.first().and_then(|ins| ins.mnemonic()), Some("call")) {
+                        return Some(ret_addr);
+                    }
+                }
+
+                None
+            };
+
+            let bin_ctx = self.inner.binary_ctx();
+
+            let get_retaddr_at = |addr| -> Option<u64> {
+                let addr = if bin_ctx.is_big() {
+                    let mut buf = [0u8; 8];
+                    self.read_memory(addr, &mut buf)
+                        .ok()
+                        .map(|_| u64::from_le_bytes(buf))
+                } else {
+                    let mut buf = [0u8; 4];
+                    self.read_memory(addr, &mut buf)
+                        .ok()
+                        .map(|_| u32::from_le_bytes(buf) as u64)
+                };
+
+                addr.and_then(filter_has_call_at_addr)
+            };
+
+            let ret_addr = get_retaddr_at(*regs.stack_ptr_mut())
+                .or_else(|| {
+                    get_retaddr_at(regs.stack_ptr_mut().checked_add(bin_ctx.size() as u64)?)
+                })
+                .or_else(|| {
+                    get_retaddr_at(regs.frame_ptr_mut().checked_add(bin_ctx.size() as u64)?)
+                });
+
+            *regs.ret_addr_mut() = ret_addr;
+
+            Ok(ret_addr)
+        }
     }
 
     fn resume(&mut self, thread: Self::StoppedThread) -> Result<(), Self::Error> {
@@ -394,73 +444,6 @@ impl<'a> SessionCx<'a> {
     }
 }
 
-fn get_thread_registers(
-    session: &sys::Session,
-    thread_id: u64,
-    disass: &capstone::Capstone,
-    bin_ctx: goblin::container::Ctx,
-) -> crate::Result<sys::thread::ThreadRegisters> {
-    let mut regs = sys::thread::get_thread_registers(thread_id)?;
-
-    #[cfg(target_arch = "x86_64")]
-    {
-        //
-        // Retrieve the current return address with simple heuristics.
-        //
-
-        let filter_has_call_at_addr = |ret_addr: u64| -> Option<u64> {
-            let prev_addr = ret_addr.checked_sub(MAX_OPCODES_LEN as u64)?;
-
-            let mut buf = [0u8; MAX_OPCODES_LEN];
-            session.read_memory(prev_addr, &mut buf).ok()?;
-
-            for i in (0..(buf.len() - 3)).rev() {
-                let addr = prev_addr + i as u64;
-                let Ok(asm) = disass.disasm_count(&buf[i..], addr, 1) else {
-                    continue;
-                };
-
-                if matches!(asm.first().and_then(|ins| ins.mnemonic()), Some("call")) {
-                    return Some(ret_addr);
-                }
-            }
-
-            None
-        };
-
-        let get_retaddr_at = |addr| -> Option<u64> {
-            let addr = if bin_ctx.is_big() {
-                let mut buf = [0u8; 8];
-                session
-                    .read_memory(addr, &mut buf)
-                    .ok()
-                    .map(|_| u64::from_le_bytes(buf))
-            } else {
-                let mut buf = [0u8; 4];
-                session
-                    .read_memory(addr, &mut buf)
-                    .ok()
-                    .map(|_| u32::from_le_bytes(buf) as u64)
-            };
-
-            addr.and_then(filter_has_call_at_addr)
-        };
-
-        let ret_addr = get_retaddr_at(*regs.stack_ptr_mut())
-            .or_else(|| get_retaddr_at(*regs.stack_ptr_mut() + bin_ctx.size() as u64))
-            .or_else(|| get_retaddr_at(*regs.frame_ptr_mut() + bin_ctx.size() as u64))
-            .unwrap_or_default();
-
-        *regs.ret_addr_mut() = ret_addr;
-    }
-
-    Ok(regs)
-}
-
-fn set_thread_registers(thread_id: u64, regs: sys::thread::ThreadRegisters) -> crate::Result<()> {
-    // FIXME: update return address in x86_64
-
-    sys::thread::set_thread_registers(thread_id, regs)?;
-
-    Ok(())
+fn get_thread_registers(thread_id: u64) -> crate::Result<sys::thread::ThreadRegisters> {
+    sys::thread::get_thread_registers(thread_id).map_err(Into::into)
 }
