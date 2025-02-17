@@ -13,7 +13,7 @@ type SymbolAddr = u64;
 
 type ThreadId = u64;
 
-type UnresolvedScope = HashMap<SymbolName, Option<usize>>;
+type UnresolvedScope = HashMap<SymbolName, usize>;
 
 /// Scoped tracing configuration.
 pub struct ScopedTraceConfig {
@@ -25,7 +25,7 @@ pub struct ScopedTraceState {
     traced_functions_unresolved: HashMap<BinaryName, UnresolvedScope>,
     traced_functions: HashMap<BinaryAddr, Vec<SymbolAddr>>,
 
-    traced_functions_depth: HashMap<SymbolAddr, Option<usize>>,
+    traced_functions_depth: HashMap<SymbolAddr, usize>,
 
     cur_scopes: HashMap<ThreadId, Vec<(SymbolAddr, usize)>>,
 }
@@ -126,22 +126,22 @@ impl ScopedTraceState {
             unreachable!("thread {thread_id} not registered")
         };
 
-        if let Some(max_depth) = self.traced_functions_depth.get(&addr) {
+        if let Some(max_depth) = self.traced_functions_depth.get(&addr).copied() {
             // this is a function to trace, we initialize a new scope with initial depth
 
             let cur_depth = 1;
             thread_scopes.push((addr, cur_depth));
 
-            matches!(*max_depth, Some(max) if cur_depth > max)
+            cur_depth > max_depth
         } else if let Some((addr, cur_depth)) = thread_scopes.last_mut() {
             // this is a nested function, we increment the current depth
 
-            let Some(max_depth) = self.traced_functions_depth.get(addr) else {
+            let Some(max_depth) = self.traced_functions_depth.get(addr).copied() else {
                 unreachable!("lookup of function to trace should not fail");
             };
 
             *cur_depth = cur_depth.saturating_add(1);
-            matches!(*max_depth, Some(max) if *cur_depth > max)
+            *cur_depth > max_depth
         } else {
             unreachable!("unexpected nested function before function to trace");
         }

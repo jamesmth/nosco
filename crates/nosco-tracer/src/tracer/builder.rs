@@ -90,9 +90,8 @@ impl<D, H> Builder<TraceWithScopes<D, H>> {
     ///
     /// - `binary` is the name of the loaded binary containing `symbol`.
     /// - `symbol` is the name of the function starting the trace scope
-    /// - `depth` is the optional maximum function call depth to reach (in
-    ///   this scope) before pausing the tracer (until the last called function
-    ///   returns)
+    /// - `depth` is the maximum function call depth to reach (in this scope)
+    ///   before pausing the tracer (until the last called function returns)
     ///
     /// The trace scope starts when the specified function is called by the
     /// tracee, and stops when the function returns.
@@ -100,13 +99,13 @@ impl<D, H> Builder<TraceWithScopes<D, H>> {
         mut self,
         binary: impl Into<String>,
         symbol: impl Into<String>,
-        depth: impl Into<Option<usize>>,
+        depth: usize,
     ) -> Self {
         self.state
             .scopes_to_trace
             .entry(binary.into())
             .or_default()
-            .insert(symbol.into(), depth.into());
+            .insert(symbol.into(), depth);
         self
     }
 }
@@ -166,7 +165,7 @@ pub struct TraceAll<D, H> {
 pub struct TraceWithScopes<D, H> {
     debugger: D,
     handler: H,
-    scopes_to_trace: HashMap<String, HashMap<String, Option<usize>>>,
+    scopes_to_trace: HashMap<String, HashMap<String, usize>>,
 }
 
 pub trait ReadyToBuild {
