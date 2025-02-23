@@ -6,7 +6,7 @@ use std::io::Cursor;
 
 use indoc::indoc;
 
-use self::error::{Error, Result};
+use self::error::Result;
 pub use self::stream::YamlStream;
 
 #[derive(Debug)]
@@ -28,7 +28,7 @@ fn init_binary_loaded_empty() {
         trace: []
     "};
 
-    let mut stream = YamlStream::init(Cursor::new(input)).unwrap();
+    let mut stream = YamlStream::from_reader(Cursor::new(input));
     assert!(stream.next().is_none());
 }
 
@@ -43,7 +43,7 @@ fn init_binary_loaded() {
         trace: []
     "};
 
-    let mut stream = YamlStream::init(Cursor::new(input)).unwrap();
+    let mut stream = YamlStream::from_reader(Cursor::new(input));
     assert!(is_init_binary_loaded(stream.next(), "foo.so"));
     assert!(is_init_binary_loaded(stream.next(), "bar.so"));
     assert!(stream.next().is_none());
@@ -60,7 +60,7 @@ fn update_binary_loaded_unloaded() {
           - unloaded: foo.so
     "};
 
-    let mut stream = YamlStream::init(Cursor::new(input)).unwrap();
+    let mut stream = YamlStream::from_reader(Cursor::new(input));
     assert!(is_update_binary_loaded(stream.next(), "foo.so"));
     assert!(is_update_binary_unloaded(stream.next(), "foo.so"));
     assert!(stream.next().is_none());
@@ -87,7 +87,7 @@ fn mixed_nested_calls_and_execs() {
           - Function4: []
     "};
 
-    let mut stream = YamlStream::init(Cursor::new(input)).unwrap();
+    let mut stream = YamlStream::from_reader(Cursor::new(input));
 
     assert!(is_exec(stream.next(), 0, "asm 1"));
     assert!(is_fn_call(stream.next(), "Function1"));

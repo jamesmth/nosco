@@ -20,10 +20,10 @@ nosco-debugger = { workspace = true }
 
 capstone = { workspace = true }
 indoc = { workspace = true }
-libyml = { workspace = true }
+libyaml-safer = { workspace = true }
 nasm-rs = { workspace = true }
+ouroboros = { workspace = true }
 regex = { workspace = true }
-serde_yml = { workspace = true }
 tempfile = { workspace = true }
 test-log = { workspace = true }
 tokio = { workspace = true, features = ["macros", "process", "rt-multi-thread"] }

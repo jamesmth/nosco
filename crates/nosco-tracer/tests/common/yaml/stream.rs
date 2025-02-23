@@ -3,11 +3,10 @@ use std::io::Read;
 use std::mem;
 use std::path::Path;
 
-use super::parser::{FooterParser, HeaderParser, InitParser, ScopeParser, YamlParser};
-
+use super::parser::{FooterParser, HeaderParser, InitParser, ScopeParser};
 use super::TraceEvent;
 
-enum ParserState<R: Read> {
+enum ParserState<R: 'static> {
     Header(HeaderParser<R>),
     TraceInit(InitParser<R>),
     TraceBody(ScopeParser<R>),
@@ -15,24 +14,22 @@ enum ParserState<R: Read> {
     End,
 }
 
-pub struct YamlStream<R: Read> {
+pub struct YamlStream<R: 'static> {
     parser_state: ParserState<R>,
 }
 
 impl YamlStream<File> {
     pub fn from_path(path: impl AsRef<Path>) -> super::Result<Self> {
-        let reader = File::open(path)?;
-        Self::init(reader)
+        File::open(path).map(Self::from_reader).map_err(Into::into)
     }
 }
 
-impl<R: Read> YamlStream<R> {
-    pub fn init(reader: R) -> super::Result<Self> {
-        let parser_state = YamlParser::init(reader)
-            .map(HeaderParser::new)
-            .map(ParserState::Header)?;
+impl<R: Read + 'static> YamlStream<R> {
+    pub fn from_reader(reader: R) -> Self {
+        let header_parser = HeaderParser::new(reader);
+        let parser_state = ParserState::Header(header_parser);
 
-        Ok(Self { parser_state })
+        Self { parser_state }
     }
 
     fn next_event(&mut self) -> super::Result<Option<TraceEvent>> {

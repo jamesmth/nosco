@@ -10,8 +10,8 @@ pub enum Error {
     StringParsing(#[from] std::num::ParseIntError),
 
     /// YAML parser error.
-    #[error("YAML internal error: {0}")]
-    Yaml(serde_yml::libyml::error::Error),
+    #[error(transparent)]
+    Yaml(#[from] libyaml_safer::Error),
 }
 
 /// Result type of this crate.
