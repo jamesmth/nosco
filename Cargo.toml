@@ -40,7 +40,7 @@ tokio = "1.43.0"
 tokio-stream = { version = "0.1.17" }
 tokio-util = { version = "0.7.13" }
 tracing = "0.1.41"
-wholesym = "0.7.0"
+wholesym = "0.8.1"
 
 [profile.release]
 lto = true
