@@ -177,6 +177,51 @@ impl Session {
 
         Ok(())
     }
+
+    fn read_addr_at(&self, addr: u64) -> crate::Result<u64> {
+        if self.binary_ctx().is_big_container {
+            let mut buf = [0u8; 8];
+            self.read_memory(addr, &mut buf)
+                .map(|_| u64::from_le_bytes(buf))
+        } else {
+            let mut buf = [0u8; 4];
+            self.read_memory(addr, &mut buf)
+                .map(|_| u32::from_le_bytes(buf) as u64)
+        }
+    }
+
+    fn addr_of_call_instruction_before_return_address(
+        &self,
+        ret_addr: u64,
+    ) -> crate::Result<Option<u64>> {
+        #[cfg(target_arch = "x86_64")]
+        {
+            let Some(prev_instr_addr) = ret_addr.checked_sub(MAX_OPCODES_LEN as u64) else {
+                return Ok(None);
+            };
+
+            let mut prev_instr = [0u8; MAX_OPCODES_LEN];
+            self.read_memory(prev_instr_addr, &mut prev_instr)?;
+
+            for i in (0..(prev_instr.len() - 3)).rev() {
+                let addr = prev_instr_addr + i as u64;
+                let Ok(asm) = self.disass.disasm_count(&prev_instr[i..], addr, 1) else {
+                    continue;
+                };
+
+                if matches!(asm.first().and_then(|ins| ins.mnemonic()), Some("call")) {
+                    return Ok(Some(addr));
+                }
+            }
+
+            Ok(None)
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            Ok(ret_addr.checked_sub(MAX_OPCODES_LEN as u64))
+        }
+    }
 }
 
 impl DebugSession for Session {
@@ -351,56 +396,84 @@ impl DebugSession for Session {
             // Retrieve the current return address with naive heuristics.
             //
 
-            let filter_has_call_at_addr = |ret_addr: u64| -> Option<u64> {
-                let prev_addr = ret_addr.checked_sub(MAX_OPCODES_LEN as u64)?;
-
-                let mut buf = [0u8; MAX_OPCODES_LEN];
-                self.read_memory(prev_addr, &mut buf).ok()?;
-
-                for i in (0..(buf.len() - 3)).rev() {
-                    let addr = prev_addr + i as u64;
-                    let Ok(asm) = self.disass.disasm_count(&buf[i..], addr, 1) else {
-                        continue;
-                    };
-
-                    if matches!(asm.first().and_then(|ins| ins.mnemonic()), Some("call")) {
-                        return Some(ret_addr);
-                    }
-                }
-
-                None
-            };
-
-            let bin_ctx = self.inner.binary_ctx();
+            let ctx_size = self.binary_ctx().container_size as u64;
 
             let get_retaddr_at = |addr| -> Option<u64> {
-                let addr = if bin_ctx.is_big() {
-                    let mut buf = [0u8; 8];
-                    self.read_memory(addr, &mut buf)
+                self.read_addr_at(addr).ok().and_then(|ret_addr| {
+                    self.addr_of_call_instruction_before_return_address(ret_addr)
                         .ok()
-                        .map(|_| u64::from_le_bytes(buf))
-                } else {
-                    let mut buf = [0u8; 4];
-                    self.read_memory(addr, &mut buf)
-                        .ok()
-                        .map(|_| u32::from_le_bytes(buf) as u64)
-                };
-
-                addr.and_then(filter_has_call_at_addr)
+                        .flatten()
+                        .map(|_| ret_addr)
+                })
             };
 
             let ret_addr = get_retaddr_at(*regs.stack_ptr_mut())
-                .or_else(|| {
-                    get_retaddr_at(regs.stack_ptr_mut().checked_add(bin_ctx.size() as u64)?)
-                })
-                .or_else(|| {
-                    get_retaddr_at(regs.frame_ptr_mut().checked_add(bin_ctx.size() as u64)?)
-                });
+                .or_else(|| get_retaddr_at(regs.stack_ptr_mut().checked_add(ctx_size)?))
+                .or_else(|| get_retaddr_at(regs.frame_ptr_mut().checked_add(ctx_size)?));
 
             *regs.ret_addr_mut() = ret_addr;
 
             Ok(ret_addr)
         }
+    }
+
+    fn compute_backtrace(
+        &mut self,
+        thread: &Self::StoppedThread,
+        depth: usize,
+    ) -> Result<Vec<u64>, Self::Error> {
+        let mut regs = self.get_registers(thread)?;
+        let mut frame_ptr = *regs.frame_ptr_mut();
+        let mut stack_ptr = *regs.stack_ptr_mut();
+
+        let ctx_size = self.binary_ctx().container_size as u64;
+
+        let mut backtrace = Vec::with_capacity(depth);
+
+        let guess_parent_call_addr_from_ret_addr_at = |addr| -> Option<u64> {
+            self.read_addr_at(addr).ok().and_then(|ret_addr| {
+                self.addr_of_call_instruction_before_return_address(ret_addr)
+                    .ok()
+                    .flatten()
+            })
+        };
+
+        for _ in 0..depth {
+            let mut ret_addr_loc = stack_ptr;
+
+            let Some(parent_call_addr) = guess_parent_call_addr_from_ret_addr_at(ret_addr_loc)
+                .or_else(|| {
+                    if stack_ptr != frame_ptr {
+                        ret_addr_loc = stack_ptr.checked_add(ctx_size)?;
+
+                        if let Some(call_addr) =
+                            guess_parent_call_addr_from_ret_addr_at(ret_addr_loc)
+                        {
+                            return Some(call_addr);
+                        }
+                    }
+
+                    ret_addr_loc = frame_ptr.checked_add(ctx_size)?;
+
+                    let call_addr = guess_parent_call_addr_from_ret_addr_at(ret_addr_loc)?;
+
+                    frame_ptr = self.read_addr_at(frame_ptr).ok()?;
+
+                    Some(call_addr)
+                })
+            else {
+                break;
+            };
+
+            backtrace.push(parent_call_addr);
+
+            stack_ptr = match ret_addr_loc.checked_add(ctx_size) {
+                Some(addr) if frame_ptr != 0 => addr,
+                _ => break,
+            };
+        }
+
+        Ok(backtrace)
     }
 
     fn resume(&mut self, thread: Self::StoppedThread) -> Result<(), Self::Error> {

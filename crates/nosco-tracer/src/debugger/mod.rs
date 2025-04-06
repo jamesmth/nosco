@@ -82,6 +82,17 @@ pub trait DebugSession {
         regs: &mut Self::Registers,
     ) -> Result<Option<u64>, Self::Error>;
 
+    /// Computes a backtrace by unwinding the stack of the given thread.
+    ///
+    /// The first element is the address of the last calling instruction (in
+    /// other words, the most recent parent), the last being for the oldest
+    /// parent.
+    fn compute_backtrace(
+        &mut self,
+        thread: &Self::StoppedThread,
+        depth: usize,
+    ) -> Result<Vec<u64>, Self::Error>;
+
     /// Adds a breakpoint at the given address of the debuggee's address space,
     ///
     /// If `thread` is specified, the breakpoint is added for a **single
