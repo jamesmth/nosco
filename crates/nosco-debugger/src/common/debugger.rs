@@ -1,5 +1,5 @@
-use nosco_tracer::tracer::TracedProcessStdio;
 use nosco_tracer::Command;
+use nosco_tracer::tracer::TracedProcessStdio;
 
 use super::session::Session;
 use crate::sys;

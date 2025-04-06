@@ -12,9 +12,9 @@ use tracing::Instrument;
 
 use wholesym::samply_symbols::pdb::FallibleIterator;
 
+use super::DebugStop;
 use super::breakpoint::BreakpointManager;
 use super::thread::ThreadManager;
-use super::DebugStop;
 use crate::sys;
 use crate::sys::process::TracedProcessHandle;
 
@@ -479,7 +479,7 @@ impl SessionCx<'_> {
     }
 
     pub async fn on_binary_loaded(&mut self, binary: sys::MappedBinary) {
-        let span = tracing::info_span!("UnwindModule", name = binary.file_name());
+        let span = tracing::error_span!("UnwindModule", name = binary.file_name());
         async {
             match binary.to_unwind_module().await {
                 Ok(module) => self.unwinder.add_module(module),

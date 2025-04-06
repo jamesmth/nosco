@@ -11,12 +11,12 @@ pub use self::builder::Builder;
 use self::builder::NeedsDebugger;
 use self::state::{FullTraceState, ScopedTraceConfig, ScopedTraceState};
 pub use self::tracee::{TracedProcess, TracedProcessStdio};
+use crate::Command;
 use crate::debugger::{BinaryInformation, DebugEvent, DebugStateChange, Debugger, ThreadRegisters};
 use crate::debugger::{CpuInstruction, CpuInstructionType, DebugSession, Thread};
 use crate::debugger::{RegistersAarch64, RegistersArm, RegistersX86, RegistersX86_64};
 use crate::error::{DebuggerError, HandlerError};
 use crate::handler::EventHandler;
-use crate::Command;
 
 /// Process tracer.
 pub struct Tracer<D, H> {

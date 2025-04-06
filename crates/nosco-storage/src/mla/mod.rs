@@ -14,9 +14,9 @@ mod tests {
 
     use super::content::{StateChangeData, StateUpdateOrigin};
     use super::{MlaStorageReader, MlaStorageWriter};
+    use crate::TraceSessionStorageWriter;
     use crate::mla::content::CallData;
     use crate::mla::reader::BacktraceElement;
-    use crate::TraceSessionStorageWriter;
 
     #[test]
     fn writer_task_reports_error() {

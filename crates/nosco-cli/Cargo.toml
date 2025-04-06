@@ -1,0 +1,36 @@
+[package]
+name = "nosco-cli"
+description = "The command line interface for Nosco."
+categories = ["development-tools::debugging", "command-line-utilities"]
+keywords = ["nosco", "cli"]
+version.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "nosco"
+path = "src/main.rs"
+doc = false
+
+[dependencies]
+capstone = { workspace = true }
+clap = { workspace = true }
+kdl = { workspace = true }
+knus = { workspace = true }
+miette = { workspace = true }
+nosco-debugger = { workspace = true }
+nosco-storage = { workspace = true }
+nosco-tracer = { workspace = true }
+tokio = { workspace = true, features = ["io-std", "process", "rt-multi-thread"] }
+thiserror = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+indoc = { workspace = true }

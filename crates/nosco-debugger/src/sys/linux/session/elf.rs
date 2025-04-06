@@ -16,8 +16,8 @@ use nix::unistd::Pid;
 
 use scroll::Pread;
 
-use super::auxv::auxv_entries;
 use super::LinkMap;
+use super::auxv::auxv_entries;
 
 pub struct ExecutableScan {
     pub exe_addr: u64,

@@ -11,8 +11,8 @@ use mla::{ArchiveFile, ArchiveReader, BlocksToFileReader};
 use serde::de::DeserializeOwned;
 
 use super::content::{CallData, CallMetadata, StateChangeData, StateInitData};
-use super::content::{StateUpdateData, StateUpdateOrigin};
 use super::content::{STATE_INIT_STREAM_LABEL, STATE_UPDATE_STREAM_LABEL};
+use super::content::{StateUpdateData, StateUpdateOrigin};
 
 /// Storage reader for the MLA backend.
 pub struct MlaStorageReader<'a, R: 'a + Read + Seek> {
@@ -191,7 +191,7 @@ impl<R: Read + Seek> BacktraceReader<'_, '_, R> {
                     None => break Ok(None),
                 },
                 Either::Right(ref mut root_backtrace) => {
-                    break Ok(root_backtrace.next().map(BacktraceElement::CallAddr))
+                    break Ok(root_backtrace.next().map(BacktraceElement::CallAddr));
                 }
             };
 

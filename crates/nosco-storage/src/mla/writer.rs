@@ -11,8 +11,8 @@ use mla::{ArchiveWriter, Layers};
 use serde::Serialize;
 
 use super::content::{CallData, CallMetadata, StateChangeData, StateInitData};
-use super::content::{StateUpdateData, StateUpdateDataHeader, StateUpdateOrigin};
 use super::content::{STATE_INIT_STREAM_LABEL, STATE_UPDATE_STREAM_LABEL};
+use super::content::{StateUpdateData, StateUpdateDataHeader, StateUpdateOrigin};
 use crate::TraceSessionStorageWriter;
 
 /// Storage writer for the MLA backend.

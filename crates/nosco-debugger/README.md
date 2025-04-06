@@ -3,7 +3,7 @@ nosco-debugger
 
 [<img alt="version" src="https://img.shields.io/crates/v/nosco-debugger.svg?style=for-the-badge&color=fc8d62&logo=rust" height="18">](https://crates.io/crates/nosco-debugger)
 [<img alt="doc" src="https://img.shields.io/badge/docs.rs-nosco--debugger-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="18">](https://docs.rs/nosco-debugger)
-[<img alt="msrv" src="https://img.shields.io/crates/msrv/nosco-debugger.svg?style=for-the-badge&color=lightgray" height="18">](https://blog.rust-lang.org/2024/08/08/Rust-1.80.1.html)
+[<img alt="msrv" src="https://img.shields.io/crates/msrv/nosco-debugger.svg?style=for-the-badge&color=lightgray" height="18">](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/)
 
 This crate provides a default implementation of a debugger (to be used with
 [nosco-tracer]).

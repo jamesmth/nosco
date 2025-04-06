@@ -1,13 +1,14 @@
 [workspace]
 members = ["crates/nosco-*"]
-resolver = "2"
+default-members = ["crates/nosco-cli"]
+resolver = "3"
 
 [workspace.package]
 version = "0.0.0-reserved"
-rust-version = "1.82.0"
+rust-version = "1.85.0"
 authors = ["James Smith <jamesmth@proton.me>"]
 categories = ["development-tools::debugging"]
-edition = "2021"
+edition = "2024"
 keywords = []
 license = "MIT"
 readme = "README.md"
@@ -21,13 +22,16 @@ nosco-tracer = { path = "crates/nosco-tracer" }
 bincode = "2.0.1"
 byteorder = "1.5.0"
 capstone = { version = "0.13.0", features = ["full"] }
+clap = { version = "4.5.37", features = ["derive"] }
 framehop = { version = "0.13.2", default-features = false, features = ["std"] }
 futures-util = { version = "0.3.31", default-features = false }
 goblin = { version = "0.9.3", default-features = false }
 indexmap = "2.9.0"
 indoc = "2.0.6"
 kdl = "6.3.4"
+knus = "3.3.1"
 mla = "1.4.0"
+miette = { version = "7.6.0", features = ["fancy"] }
 nasm-rs = "0.3.0"
 nix = { version = "0.29.0" }
 regex = "1.11.1"
@@ -40,11 +44,13 @@ tokio = "1.44.2"
 tokio-stream = { version = "0.1.17" }
 tokio-util = { version = "0.7.15" }
 tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19" }
 wholesym = "0.8.1"
 
 [profile.release]
 lto = true
 codegen-units = 1
+strip = true
 
 [workspace.lints.rust]
 missing_docs = "warn"

@@ -66,7 +66,7 @@ impl RDebug {
                 return Err(crate::sys::Error::BadSoState(
                     self.rstate as u8,
                     rstate as u8,
-                ))
+                ));
             }
         };
 

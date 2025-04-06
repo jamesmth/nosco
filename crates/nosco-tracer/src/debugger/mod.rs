@@ -5,8 +5,8 @@ use std::future::Future;
 
 pub use self::binary::{BinaryInformation, BinaryView};
 pub use self::thread::Thread;
-use crate::tracer::TracedProcessStdio;
 use crate::Command;
+use crate::tracer::TracedProcessStdio;
 
 /// Trait implementing the spawning logic of a debugger.
 pub trait Debugger {

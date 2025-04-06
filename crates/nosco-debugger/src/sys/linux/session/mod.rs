@@ -11,7 +11,7 @@ use indexmap::IndexSet;
 use nix::libc::{PTRACE_EVENT_CLONE, PTRACE_EVENT_EXIT};
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
-use nix::sys::wait::{waitpid, WaitStatus};
+use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::Pid;
 
 use wholesym::{SymbolManager, SymbolManagerConfig};
@@ -21,8 +21,8 @@ use self::rdebug::RDebug;
 use super::binary::MappedBinary;
 use super::mem;
 use super::process::TracedProcessHandle;
-use crate::common::session::SessionCx;
 use crate::common::DebugStop;
+use crate::common::session::SessionCx;
 
 pub struct Session {
     /// Debuggee handle.

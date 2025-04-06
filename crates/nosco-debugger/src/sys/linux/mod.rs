@@ -11,10 +11,10 @@ use std::os::unix::ffi::OsStringExt;
 
 use nix::fcntl::OFlag;
 use nix::sys::ptrace;
-use nix::unistd::{chdir, dup2, execvp, fork, pipe2, ForkResult};
+use nix::unistd::{ForkResult, chdir, dup2, execvp, fork, pipe2};
 
-use nosco_tracer::tracer::TracedProcessStdio;
 use nosco_tracer::Command;
+use nosco_tracer::tracer::TracedProcessStdio;
 
 pub use self::binary::MappedBinary;
 pub use self::error::{Error, Result};
@@ -113,7 +113,7 @@ pub async fn spawn_debuggee(
 mod imp {
     use nix::sys::ptrace;
     use nix::sys::signal::Signal;
-    use nix::sys::wait::{waitpid, WaitStatus};
+    use nix::sys::wait::{WaitStatus, waitpid};
     use nix::unistd::Pid;
 
     pub(super) fn wait_for_thread_ready(pid: Pid) -> crate::sys::Result<()> {
@@ -125,7 +125,7 @@ mod imp {
             WaitStatus::Exited(_, code) => {
                 return Err(crate::sys::Error::ChildExec(
                     std::io::Error::from_raw_os_error(code),
-                ))
+                ));
             }
             _ => return Err(crate::sys::Error::BadChildWait(status)),
         }
@@ -139,7 +139,7 @@ mod imp {
     }
 
     pub(super) unsafe fn environ() -> *mut *const *const std::ffi::c_char {
-        extern "C" {
+        unsafe extern "C" {
             static mut environ: *const *const std::ffi::c_char;
         }
 
