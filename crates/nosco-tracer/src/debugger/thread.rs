@@ -9,7 +9,9 @@ pub trait Thread {
     /// Returns the thread's instruction address.
     fn instr_addr(&self) -> u64;
 
-    /// Returns a mutable reference over the single-step state
-    /// of the thread.
-    fn single_step_mut(&mut self) -> &mut bool;
+    /// Returns whether the thread is in single-step.
+    fn is_single_step(&self) -> bool;
+
+    /// Enables or disables single-step for this thread.
+    fn set_single_step(&mut self, enable: bool);
 }

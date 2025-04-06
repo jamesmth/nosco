@@ -135,7 +135,11 @@ impl nosco_tracer::debugger::Thread for StoppedThread {
         self.instr_addr
     }
 
-    fn single_step_mut(&mut self) -> &mut bool {
-        &mut self.single_step
+    fn is_single_step(&self) -> bool {
+        self.single_step
+    }
+
+    fn set_single_step(&mut self, enable: bool) {
+        self.single_step = enable;
     }
 }

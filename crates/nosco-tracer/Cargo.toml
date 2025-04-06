@@ -12,7 +12,6 @@ repository.workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
-tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

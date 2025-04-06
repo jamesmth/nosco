@@ -113,7 +113,7 @@ where
                 DebugEvent::Breakpoint(mut thread) => {
                     match prev_instrs.entry(thread.id()) {
                         // breakpoint triggered while single-stepping
-                        Entry::Occupied(prev_instr) if *thread.single_step_mut() => {
+                        Entry::Occupied(prev_instr) if thread.is_single_step() => {
                             self.handle_tracee_thread_single_step(&mut thread, prev_instr)
                                 .await?
                         }
@@ -232,7 +232,7 @@ where
 
             prev_instr.insert((thread.instr_addr(), cur_instr));
 
-            *thread.single_step_mut() = true;
+            thread.set_single_step(true);
         }
 
         Ok(())
@@ -307,7 +307,7 @@ where
 
         if disable_singlestep {
             prev_instr.remove();
-            *thread.single_step_mut() = false;
+            thread.set_single_step(false);
         }
 
         Ok(())
@@ -379,7 +379,7 @@ where
 
                         prev_instrs.insert(thread.id(), (thread.instr_addr(), cur_instr));
 
-                        *thread.single_step_mut() = true;
+                        thread.set_single_step(true);
                     }
                     TraceState::Scoped { ref mut state, .. } => {
                         state.register_thread_created(thread.id());
