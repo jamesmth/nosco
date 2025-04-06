@@ -129,6 +129,12 @@ pub trait Registers {
     /// [`compute_return_address`](DebugSession::compute_return_address)
     /// should be called instead.
     fn ret_addr_mut(&mut self) -> &mut Option<u64>;
+
+    /// Returns a mutable reference over the stack frame address.
+    fn frame_ptr_mut(&mut self) -> &mut u64;
+
+    /// Returns a mutable reference over the address of the top of the stack.
+    fn stack_ptr_mut(&mut self) -> &mut u64;
 }
 
 /// Event describing some action taking place within the debuggee.

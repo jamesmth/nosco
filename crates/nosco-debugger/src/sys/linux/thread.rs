@@ -44,32 +44,6 @@ pub struct ThreadRegisters {
     ret_addr: Option<u64>,
 }
 
-impl ThreadRegisters {
-    pub fn frame_ptr_mut(&mut self) -> &mut u64 {
-        #[cfg(target_arch = "x86_64")]
-        {
-            &mut self.inner.rbp
-        }
-
-        #[cfg(target_arch = "aarch64")]
-        {
-            &mut self.inner.regs[29]
-        }
-    }
-
-    pub fn stack_ptr_mut(&mut self) -> &mut u64 {
-        #[cfg(target_arch = "x86_64")]
-        {
-            &mut self.inner.rsp
-        }
-
-        #[cfg(target_arch = "aarch64")]
-        {
-            &mut self.inner.sp
-        }
-    }
-}
-
 impl nosco_tracer::debugger::Registers for ThreadRegisters {
     fn instr_addr_mut(&mut self) -> &mut u64 {
         #[cfg(target_arch = "x86_64")]
@@ -85,5 +59,29 @@ impl nosco_tracer::debugger::Registers for ThreadRegisters {
 
     fn ret_addr_mut(&mut self) -> &mut Option<u64> {
         &mut self.ret_addr
+    }
+
+    fn frame_ptr_mut(&mut self) -> &mut u64 {
+        #[cfg(target_arch = "x86_64")]
+        {
+            &mut self.inner.rbp
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            &mut self.inner.regs[29]
+        }
+    }
+
+    fn stack_ptr_mut(&mut self) -> &mut u64 {
+        #[cfg(target_arch = "x86_64")]
+        {
+            &mut self.inner.rsp
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            &mut self.inner.sp
+        }
     }
 }
