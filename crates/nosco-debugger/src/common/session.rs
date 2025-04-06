@@ -2,9 +2,9 @@ use std::collections::VecDeque;
 
 use capstone::arch::BuildsCapstone;
 
+use nosco_tracer::debugger::{BinaryContext, Registers, Thread};
 use nosco_tracer::debugger::{CpuInstruction, CpuInstructionType};
 use nosco_tracer::debugger::{DebugEvent, DebugSession, DebugStateChange};
-use nosco_tracer::debugger::{Registers, Thread};
 
 use super::breakpoint::BreakpointManager;
 use super::thread::ThreadManager;
@@ -237,6 +237,16 @@ impl DebugSession for Session {
 
     fn process_id(&self) -> u64 {
         self.inner.process_id()
+    }
+
+    fn binary_ctx(&self) -> BinaryContext {
+        let ctx = self.inner.binary_ctx();
+
+        BinaryContext {
+            container_size: ctx.size(),
+            is_big_container: ctx.is_big(),
+            is_little_endian: ctx.is_little_endian(),
+        }
     }
 
     fn add_breakpoint<'a>(

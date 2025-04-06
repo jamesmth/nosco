@@ -45,6 +45,9 @@ pub trait DebugSession {
     /// Debuggee's process ID.
     fn process_id(&self) -> u64;
 
+    /// Debuggee's binary context (size, endianness).
+    fn binary_ctx(&self) -> BinaryContext;
+
     /// Reads a single CPU instruction from the debuggee's address space.
     fn read_cpu_instruction(&self, addr: u64) -> Result<CpuInstruction, Self::Error>;
 
@@ -205,4 +208,20 @@ pub struct CpuInstruction {
 
     /// CPU instruction opcodes.
     pub opcodes: Vec<u8>,
+}
+
+/// Binary context (container size, byte endianness).
+#[derive(Copy, Clone)]
+pub struct BinaryContext {
+    /// Dubious pointer/address byte size of the binary context.
+    pub container_size: usize,
+
+    /// Whether the container of this binary context is "big" or not.
+    ///
+    /// On `x86_64`, a 64-bit binary is considered to have a "big" container,
+    /// and 32-bit a "small" one.
+    pub is_big_container: bool,
+
+    /// Whether this binary context is little endian or not.
+    pub is_little_endian: bool,
 }
