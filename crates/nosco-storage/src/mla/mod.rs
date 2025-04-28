@@ -1,4 +1,6 @@
-mod content;
+/// Module exposing the data structures used within the storage.
+pub mod content;
+
 mod reader;
 mod writer;
 
@@ -10,7 +12,7 @@ mod tests {
     use std::io::Cursor;
     use std::path::Path;
 
-    use super::content::StateChangeData;
+    use super::content::{StateChangeData, StateUpdateOrigin};
     use super::{MlaStorageReader, MlaStorageWriter};
     use crate::mla::content::CallData;
     use crate::mla::reader::BacktraceElement;
@@ -230,12 +232,24 @@ mod tests {
 
         assert_eq!(
             binary_updates[0],
-            (None, StateChangeData::UnloadedBinary { unload_addr: 0x0 })
+            (
+                StateUpdateOrigin {
+                    thread_id: 1,
+                    call_id: None
+                },
+                StateChangeData::UnloadedBinary { unload_addr: 0x0 }
+            )
         );
 
         assert_eq!(
             binary_updates[1],
-            (None, StateChangeData::UnloadedBinary { unload_addr: 0x1 })
+            (
+                StateUpdateOrigin {
+                    thread_id: 1,
+                    call_id: None
+                },
+                StateChangeData::UnloadedBinary { unload_addr: 0x1 }
+            )
         );
     }
 
@@ -283,7 +297,10 @@ mod tests {
         assert_eq!(
             threads_updates[0],
             (
-                None,
+                StateUpdateOrigin {
+                    thread_id: 1,
+                    call_id: None
+                },
                 StateChangeData::CreatedThread {
                     thread_id: 2,
                     root_call_ids: vec![],
@@ -323,7 +340,10 @@ mod tests {
         assert_eq!(
             thread_updates[1],
             (
-                None,
+                StateUpdateOrigin {
+                    thread_id: 2,
+                    call_id: None
+                },
                 StateChangeData::ExitedThread {
                     thread_id: 2,
                     exit_code: 0
@@ -334,7 +354,10 @@ mod tests {
         assert_eq!(
             thread_updates[2],
             (
-                None,
+                StateUpdateOrigin {
+                    thread_id: 1,
+                    call_id: None
+                },
                 StateChangeData::ExitedThread {
                     thread_id: 1,
                     exit_code: 0

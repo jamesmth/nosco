@@ -54,8 +54,7 @@ impl<'rd, R: 'rd + Read + Seek> MlaStorageReader<'rd, R> {
     pub fn state_updates_reader(
         &mut self,
     ) -> crate::Result<
-        impl Iterator<Item = crate::Result<(Option<StateUpdateOrigin>, StateChangeData)>>
-            + use<'_, 'rd, R>,
+        impl Iterator<Item = crate::Result<(StateUpdateOrigin, StateChangeData)>> + use<'_, 'rd, R>,
     > {
         let stream = self.read_state_update_stream()?;
 

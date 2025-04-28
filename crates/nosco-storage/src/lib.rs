@@ -9,5 +9,6 @@ mod mla;
 mod writer;
 
 pub use self::error::{Error, Result};
+pub use self::mla::content;
 pub use self::mla::{BacktraceElement, MlaStorageReader, MlaStorageWriter};
 pub use self::writer::TraceSessionStorageWriter;

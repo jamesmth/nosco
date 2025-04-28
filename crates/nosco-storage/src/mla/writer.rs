@@ -539,7 +539,7 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
         let update_id = self.next_update_id;
         self.next_update_id = self.next_update_id.wrapping_add(1);
 
-        let update_origin = if let Some(call_stream) = self
+        let call_id = if let Some(call_stream) = self
             .call_streams
             .get(&thread_id)
             .ok_or(crate::Error::UnexpectedThreadId(thread_id))?
@@ -551,17 +551,14 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
 
             self.write_to_stream(stream_id, CallData::UpdatedState { update_id })?;
 
-            Some(StateUpdateOrigin {
-                call_id: stream_label,
-                addr: stream_latest_addr,
-            })
+            Some((stream_label, stream_latest_addr))
         } else {
             None
         };
 
         Ok(StateUpdateDataHeader {
             update_id,
-            update_origin,
+            update_origin: StateUpdateOrigin { thread_id, call_id },
         })
     }
 
