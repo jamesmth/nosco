@@ -25,8 +25,8 @@ where
     /// Any execution trace event is forwarded to the [handler](crate::handler::EventHandler)
     /// specified when [building the tracer](super::Builder).
     ///
-    /// On success, the exit code of the process is returned.
-    pub async fn resume_and_trace(self) -> crate::Result<i32, S::Error, H::Error> {
+    /// On success, the exit code of the process is returned, as well as the event handler.
+    pub async fn resume_and_trace(self) -> crate::Result<(i32, H), S::Error, H::Error> {
         self.trace_task.run().await
     }
 }

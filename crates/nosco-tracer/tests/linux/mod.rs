@@ -113,7 +113,7 @@ async fn recursive_ret_breakpoint() {
         .await
         .expect("spawn");
 
-    let exit_code = tracee.resume_and_trace().await.expect("run");
+    let (exit_code, _) = tracee.resume_and_trace().await.expect("run");
     assert_eq!(exit_code, 0);
 
     drop(tracee_path);
@@ -151,7 +151,7 @@ pub async fn test_trace_hello(is_64bit: bool, is_pie: bool, is_static: bool) {
         .await
         .expect("spawn");
 
-    let exit_code = tracee.resume_and_trace().await.expect("run");
+    let (exit_code, _) = tracee.resume_and_trace().await.expect("run");
     assert_eq!(exit_code, 0);
 
     let mut stdout = tokio::process::ChildStdout::from_std(tracee_stdio.stdout).expect("stdout");
@@ -199,7 +199,7 @@ pub async fn test_trace_dlopen(is_64bit: bool, is_pie: bool, is_static: bool) {
         .await
         .expect("spawn");
 
-    let exit_code = tracee.resume_and_trace().await.expect("run");
+    let (exit_code, _) = tracee.resume_and_trace().await.expect("run");
     assert_eq!(exit_code, 0);
 
     drop(tracee_path);

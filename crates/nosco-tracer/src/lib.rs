@@ -35,7 +35,7 @@
 //!     let (process, _) = tracer.spawn(Command::new("ls").arg("/")).await.unwrap();
 //!
 //!     // wait for the traced process to exit
-//!     let exit_code = process.resume_and_trace().await.unwrap();
+//!     let (exit_code, _) = process.resume_and_trace().await.unwrap();
 //! }
 //!
 //! struct CustomHandler;
