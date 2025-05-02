@@ -1,0 +1,30 @@
+start {
+    binaries {
+        - <exe>
+        - ld-linux.so.2
+        - linux-vdso.so.1
+    }
+}
+
+trace {
+    load_binary linux-gate.so.1
+    load_binary libc.so.6
+    unload_binary linux-gate.so.1
+
+    call main {
+        <0x0> "call <imm>"
+
+        call <unknown>
+
+        <0x5>  "add ebx, <imm>"
+        <0xb>  "lea eax, [ebx + <imm>]"
+        <0x11> "push eax"
+        <0x12> "call <imm>"
+
+        call <unknown>
+
+        <0x17> "add esp, 4"
+        <0x1a> "xor eax, eax"
+        <0x1c> "ret"
+    }
+}

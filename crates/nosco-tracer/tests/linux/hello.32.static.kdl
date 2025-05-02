@@ -1,0 +1,25 @@
+start {
+    binaries {
+        - <exe>
+        - linux-vdso.so.1
+    }
+}
+
+trace {
+    call main {
+        <0x0> "call <imm>"
+
+        call <unknown>
+
+        <0x5>  "add ebx, <imm>"
+        <0xb>  "lea eax, [ebx + <imm>]"
+        <0x11> "push eax"
+        <0x12> "call <imm>"
+
+        call puts
+
+        <0x17> "add esp, 4"
+        <0x1a> "xor eax, eax"
+        <0x1c> "ret"
+    }
+}

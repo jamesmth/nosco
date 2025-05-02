@@ -1,0 +1,18 @@
+start {
+    binaries {
+        - <exe>
+        - linux-vdso.so.1
+    }
+}
+
+trace {
+    call main {
+        <0x0> "lea rdi, [rip + <imm>]"
+        <0x7> "call <imm>"
+
+        call puts
+
+        <0xc> "xor rax, rax"
+        <0xf> "ret"
+    }
+}

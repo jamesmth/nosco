@@ -1,0 +1,33 @@
+start {
+    binaries {
+        - <exe>
+        - ld-linux-x86-64.so.2
+        - linux-vdso.so.1
+    }
+}
+
+trace {
+    load_binary libc.so.6
+
+    call main {
+        <0x0>  "push rbp"
+        <0x1>  "mov rbp, rsp"
+        <0x4>  "lea rdi, [rip + <imm>]"
+        <0xb>  "mov esi, 1"
+        <0x10> "call <imm>"
+
+        call <unknown> {
+            load_binary libm.so.6
+        }
+
+        <0x15> "mov rdi, rax"
+        <0x18> "call <imm>"
+
+        call <unknown> {
+            unload_binary libm.so.6
+        }
+
+        <0x1d> "pop rbp"
+        <0x1e> "ret"
+    }
+}

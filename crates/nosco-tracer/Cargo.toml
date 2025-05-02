@@ -20,9 +20,8 @@ nosco-debugger = { workspace = true }
 
 capstone = { workspace = true }
 indoc = { workspace = true }
-libyaml-safer = { workspace = true }
+kdl = { workspace = true }
 nasm-rs = { workspace = true }
-ouroboros = { workspace = true }
 regex = { workspace = true }
 tempfile = { workspace = true }
 test-log = { workspace = true }

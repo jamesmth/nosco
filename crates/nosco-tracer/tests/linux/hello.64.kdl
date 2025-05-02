@@ -1,0 +1,21 @@
+start {
+    binaries {
+        - <exe>
+        - ld-linux-x86-64.so.2
+        - linux-vdso.so.1
+    }
+}
+
+trace {
+    load_binary libc.so.6
+
+    call main {
+        <0x0> "lea rdi, [rip + <imm>]"
+        <0x7> "call <imm>"
+
+        call <unknown>
+
+        <0xc> "xor rax, rax"
+        <0xf> "ret"
+    }
+}

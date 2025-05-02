@@ -1,30 +1,33 @@
 use std::collections::HashMap;
-use std::path::Path;
+
+use kdl::{KdlDocument, KdlNode};
 
 use nosco_tracer::debugger::BinaryView;
 
+use regex::Regex;
+
 type MappedBinary = <nosco_debugger::Session as nosco_tracer::debugger::DebugSession>::MappedBinary;
 type MappedView = <MappedBinary as nosco_tracer::debugger::BinaryInformation>::View;
-
-use super::yaml::{TraceEvent, YamlStream};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {}
 
 pub struct TestTraceHandler {
-    expected: YamlStream<std::fs::File>,
     mapped_exe: Option<MappedView>,
     disass: capstone::Capstone,
     exe_name: String,
     last_fn_addr: Vec<u64>,
     mapped_images: HashMap<u64, String>,
+
+    regex_imm: Regex,
+
+    kdl_node_binaries: KdlNode,
+    kdl_node_calls: Vec<KdlNode>,
 }
 
 impl TestTraceHandler {
-    pub fn new(trace_file: &Path, exe_name: String, is_64bits: bool) -> Self {
+    pub fn new(exe_name: String, is_64bits: bool) -> Self {
         use capstone::arch::BuildsCapstone;
-
-        let expected = YamlStream::from_path(trace_file).expect("from_path");
 
         let mode = if is_64bits {
             capstone::arch::x86::ArchMode::Mode64
@@ -33,13 +36,29 @@ impl TestTraceHandler {
         };
 
         Self {
-            expected,
             mapped_exe: None,
             disass: capstone::Capstone::new().x86().mode(mode).build().unwrap(),
             exe_name,
             last_fn_addr: Vec::new(),
             mapped_images: HashMap::new(),
+            regex_imm: Regex::new("0x[0-9a-fA-F]+").unwrap(),
+            kdl_node_binaries: KdlNode::new("binaries"),
+            kdl_node_calls: vec![KdlNode::new("trace")],
         }
+    }
+
+    pub fn into_kdl(mut self) -> KdlDocument {
+        let mut kdl = KdlDocument::new();
+
+        let mut node = KdlNode::new("start");
+        node.ensure_children()
+            .nodes_mut()
+            .push(self.kdl_node_binaries);
+        kdl.nodes_mut().push(node);
+
+        kdl.nodes_mut().push(self.kdl_node_calls.pop().unwrap());
+
+        kdl
     }
 }
 
@@ -55,25 +74,32 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
     ) -> Result<(), Self::Error> {
         use nosco_tracer::debugger::BinaryInformation;
 
-        if binary.file_name() == self.exe_name {
+        let binary_name = if binary.file_name() == self.exe_name {
             let view = binary.to_view().await.expect("view");
             self.mapped_exe = Some(view);
-        }
-
-        let trace_event = self.expected.next().expect("next").expect("event");
+            "<exe>"
+        } else {
+            binary.file_name()
+        };
 
         if thread_id.is_some() {
-            assert!(
-                matches!(trace_event, TraceEvent::StateUpdateBinaryLoaded { name } if name == binary.file_name())
-            );
+            let mut node = KdlNode::new("load_binary");
+            node.entries_mut().push(binary_name.into());
+
+            self.kdl_node_calls
+                .last_mut()
+                .unwrap()
+                .ensure_children()
+                .nodes_mut()
+                .push(node);
         } else {
-            match trace_event {
-                TraceEvent::StateInitBinaryLoaded { name } if name == "<exe>" => {
-                    assert_eq!(self.exe_name, binary.file_name())
-                }
-                TraceEvent::StateInitBinaryLoaded { name } => assert_eq!(name, binary.file_name()),
-                _ => panic!("bad trace event"),
-            }
+            let mut node = KdlNode::new("-");
+            node.entries_mut().push(binary_name.into());
+
+            self.kdl_node_binaries
+                .ensure_children()
+                .nodes_mut()
+                .push(node);
         }
 
         self.mapped_images
@@ -88,17 +114,19 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         _thread_id: u64,
         unload_addr: u64,
     ) -> Result<(), Self::Error> {
-        let TraceEvent::StateUpdateBinaryUnloaded { name } =
-            self.expected.next().expect("next").expect("event")
-        else {
-            panic!("bad trace event");
-        };
-
-        let Some(s) = self.mapped_images.remove(&unload_addr) else {
+        let Some(binary_name) = self.mapped_images.remove(&unload_addr) else {
             panic!("bad unload addr")
         };
 
-        assert_eq!(name, s);
+        let mut node = KdlNode::new("unload_binary");
+        node.entries_mut().push(binary_name.into());
+
+        self.kdl_node_calls
+            .last_mut()
+            .unwrap()
+            .ensure_children()
+            .nodes_mut()
+            .push(node);
 
         Ok(())
     }
@@ -110,29 +138,22 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
     ) -> Result<(), Self::Error> {
         use nosco_tracer::debugger::Thread;
 
-        let trace_event = self.expected.next().expect("next").expect("event");
-
-        let TraceEvent::FnCall { name } = trace_event else {
-            panic!("expected fn call");
-        };
-
         self.last_fn_addr.push(thread.instr_addr());
 
-        if name != "?" {
-            if let Some((symbol, offset)) = self
-                .mapped_exe
-                .as_ref()
-                .unwrap()
-                .symbol_of_addr(thread.instr_addr())
-                .await
-                .expect("symbol_of_addr")
-            {
-                assert_eq!(offset, 0);
-                assert_eq!(name, symbol);
-            } else {
-                panic!("fn symbol not found at {:#x}", thread.instr_addr());
-            }
-        }
+        let symbol = self
+            .mapped_exe
+            .as_ref()
+            .unwrap()
+            .symbol_of_addr(thread.instr_addr())
+            .await
+            .expect("symbol_of_addr")
+            .and_then(|(s, offset)| (offset == 0).then_some(s))
+            .unwrap_or_else(|| "<unknown>".to_owned());
+
+        let mut node = KdlNode::new("call");
+        node.entries_mut().push(symbol.into());
+
+        self.kdl_node_calls.push(node);
 
         Ok(())
     }
@@ -142,9 +163,13 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         _session: &mut Self::Session,
         _thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
     ) -> Result<(), Self::Error> {
-        let trace_event = self.expected.next().expect("next").expect("event");
-
-        assert!(matches!(trace_event, TraceEvent::FnReturn));
+        let node = self.kdl_node_calls.pop().unwrap();
+        self.kdl_node_calls
+            .last_mut()
+            .unwrap()
+            .ensure_children()
+            .nodes_mut()
+            .push(node);
 
         self.last_fn_addr.pop();
 
@@ -158,14 +183,6 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         opcodes_addr: u64,
         opcodes: Vec<u8>,
     ) -> Result<(), Self::Error> {
-        let trace_event = self.expected.next().expect("next").expect("event");
-
-        let TraceEvent::Exec { offset, asm } = trace_event else {
-            panic!("expected instr exec");
-        };
-
-        let regex = regex::Regex::new(&asm).unwrap();
-
         let disass = {
             let insns = self
                 .disass
@@ -190,9 +207,18 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
             ins_pretty
         };
 
-        assert!(regex.is_match(&disass), "regex not matched by: {disass}");
+        let offset = opcodes_addr - self.last_fn_addr.last().unwrap();
+        let disass = self.regex_imm.replace_all(disass.trim(), "<imm>");
 
-        assert_eq!(opcodes_addr, self.last_fn_addr.last().unwrap() + offset);
+        let mut node = KdlNode::new(format!("<{offset:#x}>"));
+        node.entries_mut().push(disass.as_ref().into());
+
+        self.kdl_node_calls
+            .last_mut()
+            .unwrap()
+            .ensure_children()
+            .nodes_mut()
+            .push(node);
 
         Ok(())
     }
@@ -203,7 +229,15 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         _thread_id: u64,
         _exit_code: i32,
     ) -> Result<(), Self::Error> {
-        assert!(self.expected.next().is_none());
+        while self.kdl_node_calls.len() > 1 {
+            let node = self.kdl_node_calls.pop().unwrap();
+            self.kdl_node_calls
+                .last_mut()
+                .unwrap()
+                .ensure_children()
+                .nodes_mut()
+                .push(node);
+        }
 
         Ok(())
     }

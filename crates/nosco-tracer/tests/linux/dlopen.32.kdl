@@ -1,0 +1,44 @@
+start {
+    binaries {
+        - <exe>
+        - ld-linux.so.2
+        - linux-vdso.so.1
+    }
+}
+
+trace {
+    load_binary linux-gate.so.1
+    load_binary libc.so.6
+    unload_binary linux-gate.so.1
+
+    call main {
+        <0x0> "push ebp"
+        <0x1> "mov ebp, esp"
+        <0x3> "call <imm>"
+
+        call <unknown>
+
+        <0x8>  "add ebx, <imm>"
+        <0xe>  "lea eax, [ebx + <imm>]"
+        <0x14> "mov ecx, 1"
+        <0x19> "push ecx"
+        <0x1a> "push eax"
+        <0x1b> "call <imm>" 
+
+        call <unknown> {
+            load_binary libm.so.6
+        }
+
+        <0x20> "add esp, 8"
+        <0x23> "push eax"
+        <0x24> "call <imm>"
+
+        call <unknown> {
+            unload_binary libm.so.6
+        }
+
+        <0x29> "add esp, 4"
+        <0x2c> "pop ebp"
+        <0x2d> "ret"
+    }
+}
