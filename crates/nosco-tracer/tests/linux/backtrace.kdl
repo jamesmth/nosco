@@ -1,0 +1,20 @@
+start {
+    binaries {
+        - <exe>
+        - ld-linux-x86-64.so.2
+        - linux-vdso.so.1
+    }
+}
+
+trace {
+    load_binary libc.so.6
+
+    call func5 {
+        backtrace {
+            func1
+            func2+0x5
+            func3+0x4
+            func4
+        }
+    }
+}
