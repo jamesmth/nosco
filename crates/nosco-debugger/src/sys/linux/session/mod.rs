@@ -129,25 +129,19 @@ impl Session {
 
         self::watchpoint::remove_hardware_watchpoint(self.debuggee_handle.id())?;
 
-        let (rdebug_addr_loc, rdebug_addr, elf_ctx) = match self.rdebug_cx {
-            RDebugContext::Uninit {
-                rdebug_addr,
-                elf_ctx,
-            } => {
-                (0 /* irrelevant */, rdebug_addr, elf_ctx)
+        let (rdebug_addr_loc, rdebug_addr) = match self.rdebug_cx {
+            RDebugContext::Uninit { rdebug_addr } => {
+                (0 /* irrelevant */, rdebug_addr)
             }
-            RDebugContext::UninitLoc {
-                rdebug_addr_loc,
-                elf_ctx,
-            } => {
+            RDebugContext::UninitLoc { rdebug_addr_loc } => {
                 let mut rdebug_addr =
                     ptrace::read(self.debuggee_handle.id(), rdebug_addr_loc as *mut _)? as u64;
 
-                if !elf_ctx.is_big() {
+                if !self.elf_ctx.is_big() {
                     rdebug_addr &= 0xffffffff;
                 }
 
-                (rdebug_addr_loc, rdebug_addr, elf_ctx)
+                (rdebug_addr_loc, rdebug_addr)
             }
             _ => return Ok(true),
         };
@@ -156,7 +150,7 @@ impl Session {
             rdebug_addr_loc,
             rdebug_addr,
             self.debuggee_handle.id(),
-            elf_ctx,
+            self.elf_ctx,
             &mut session_cx,
         )?;
 
@@ -217,18 +211,12 @@ enum RDebugContext {
     UninitLoc {
         /// The `r_debug` struct address' location (in _DYNAMIC).
         rdebug_addr_loc: u64,
-
-        /// ELF context (e.g., endianness) in the debuggee.
-        elf_ctx: goblin::container::Ctx,
     },
 
     /// The `r_debug` struct content is not initialized yet.
     Uninit {
         /// The `r_debug` struct address.
         rdebug_addr: u64,
-
-        /// ELF context (e.g., endianness) in the debuggee.
-        elf_ctx: goblin::container::Ctx,
     },
 }
 
@@ -258,18 +246,12 @@ impl RDebugContext {
             } else {
                 tracing::debug!("r_brk is not set");
 
-                Self::Uninit {
-                    rdebug_addr,
-                    elf_ctx,
-                }
+                Self::Uninit { rdebug_addr }
             }
         } else {
             tracing::debug!("r_debug address is not set");
 
-            Self::UninitLoc {
-                rdebug_addr_loc,
-                elf_ctx,
-            }
+            Self::UninitLoc { rdebug_addr_loc }
         };
 
         match cx {
@@ -278,19 +260,13 @@ impl RDebugContext {
                 // whenever its state is changed (e.g., new library loaded).
                 session_cx.add_internal_breakpoint(rdebug.rbrk_addr)?;
             }
-            RDebugContext::Uninit {
-                rdebug_addr,
-                elf_ctx,
-            } => {
+            RDebugContext::Uninit { rdebug_addr } => {
                 // Add a watchpoint to the `r_brk` field of the `r_debug` struct, to detect
                 // when the run-time linker initializes it.
                 let field_addr = rdebug_addr + elf_ctx.size() as u64 * 2;
                 self::watchpoint::add_hardware_watchpoint(debuggee_pid, elf_ctx, field_addr, true)?;
             }
-            RDebugContext::UninitLoc {
-                rdebug_addr_loc,
-                elf_ctx,
-            } => {
+            RDebugContext::UninitLoc { rdebug_addr_loc } => {
                 // Add a watchpoint to the `r_debug` struct address, to detect when
                 // the run-time linker initializes it.
                 self::watchpoint::add_hardware_watchpoint(
