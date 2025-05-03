@@ -47,7 +47,7 @@ impl<D: Debugger, H> Tracer<D, H> {
     ///
     /// If the returned [`TracedProcess`] is dropped, a kill operation is invoked
     /// on the spawned process.
-    #[tracing::instrument(name = "Spawn", skip(self))]
+    #[tracing::instrument(name = "Spawn", skip_all, fields(program = %command.program.display(), args = ?command.args))]
     #[allow(clippy::type_complexity)]
     pub async fn spawn(
         mut self,

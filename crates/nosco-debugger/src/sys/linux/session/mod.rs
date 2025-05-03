@@ -53,7 +53,9 @@ impl Session {
         _thread_pids: &[u64],
         mut session_cx: SessionCx<'_>,
     ) -> crate::sys::Result<Self> {
-        let symbol_manager = Arc::new(SymbolManager::with_config(SymbolManagerConfig::default()));
+        let mut symbol_manager = SymbolManager::with_config(SymbolManagerConfig::default());
+        symbol_manager.set_observer(Some(Arc::new(SymbolManagerObserver)));
+        let symbol_manager = Arc::new(symbol_manager);
 
         let mut scan = self::elf::scan_debuggee_exe(debuggee_handle.id()).await?;
 
@@ -301,5 +303,48 @@ impl RDebugContext {
         }
 
         Ok(cx)
+    }
+}
+
+struct SymbolManagerObserver;
+impl wholesym::SymbolManagerObserver for SymbolManagerObserver {
+    fn on_download_canceled(&self, _download_id: u64) {}
+    fn on_download_started(&self, _download_id: u64) {}
+    fn on_download_progress(
+        &self,
+        _download_id: u64,
+        _bytes_so_far: u64,
+        _total_bytes: Option<u64>,
+    ) {
+    }
+
+    fn on_new_download_before_connect(&self, download_id: u64, url: &str) {
+        tracing::debug!(download_id, url, "downloading");
+    }
+
+    fn on_download_completed(
+        &self,
+        download_id: u64,
+        _uncompressed_size_in_bytes: u64,
+        _time_until_headers: std::time::Duration,
+        _time_until_completed: std::time::Duration,
+    ) {
+        tracing::debug!(download_id, "download completed");
+    }
+
+    fn on_download_failed(&self, download_id: u64, reason: wholesym::DownloadError) {
+        tracing::debug!(download_id, error = %reason, "download failed");
+    }
+
+    fn on_file_created(&self, path: &Path, _size_in_bytes: u64) {
+        tracing::debug!(path = %path.display(), "file created");
+    }
+
+    fn on_file_accessed(&self, path: &Path) {
+        tracing::debug!(path = %path.display(), "file accessed");
+    }
+
+    fn on_file_missed(&self, path: &Path) {
+        tracing::debug!(path = %path.display(), "file missed");
     }
 }

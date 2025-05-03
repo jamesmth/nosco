@@ -61,6 +61,9 @@ impl ScopedTraceState {
         let mut resolved_addrs = Vec::with_capacity(unresolved.len());
 
         for (symbol, trace_depth) in unresolved.iter() {
+            let span = tracing::info_span!("ResolveSymbol", binary = binary.file_name(), symbol);
+            let _guard = span.enter();
+
             let Some(addr) = binary_view
                 .addr_of_symbol(symbol)
                 .map_err(|e| DebuggerError(e.into().into()))?
@@ -71,12 +74,7 @@ impl ScopedTraceState {
                 ));
             };
 
-            tracing::info!(
-                symbol,
-                addr = format_args!("{addr:#x}"),
-                binary = binary.file_name(),
-                "resolved"
-            );
+            tracing::info!(addr = format_args!("{addr:#x}"), "resolved");
 
             self.traced_functions_depth.insert(addr, *trace_depth);
             resolved_addrs.push(addr);

@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use tracing::Instrument;
+
 use wholesym::{LookupAddress, SymbolManager, SymbolMap};
 
 /// Loaded image.
@@ -65,6 +67,7 @@ impl nosco_tracer::debugger::BinaryInformation for MappedBinary {
         let symbol_map = self
             .symbol_manager
             .load_symbol_map_for_binary_at_path(&self.path, None)
+            .instrument(tracing::info_span!("LoadSymbols", binary = self.file_name))
             .await?;
 
         Ok(MappedBinaryView {
