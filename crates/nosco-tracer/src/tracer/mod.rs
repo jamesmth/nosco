@@ -370,16 +370,20 @@ where
                     TraceState::Full { ref mut state, .. } => {
                         state.register_thread_created(thread.id());
 
-                        // enable single-step
+                        let max_depth_exceeded = state.register_function_call(thread.id());
 
-                        let cur_instr = self
-                            .session
-                            .read_cpu_instruction(thread.instr_addr())
-                            .map_err(DebuggerError)?;
+                        if !max_depth_exceeded {
+                            // enable single-step
 
-                        prev_instrs.insert(thread.id(), (thread.instr_addr(), cur_instr));
+                            let cur_instr = self
+                                .session
+                                .read_cpu_instruction(thread.instr_addr())
+                                .map_err(DebuggerError)?;
 
-                        thread.set_single_step(true);
+                            prev_instrs.insert(thread.id(), (thread.instr_addr(), cur_instr));
+
+                            thread.set_single_step(true);
+                        }
                     }
                     TraceState::Scoped { ref mut state, .. } => {
                         state.register_thread_created(thread.id());
