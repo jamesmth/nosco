@@ -6,13 +6,12 @@ use indexmap::IndexSet;
 use nix::sys::ptrace;
 use nix::unistd::Pid;
 
-use nosco_tracer::debugger::{DebugSession, DebugStateChange};
-
 use scroll::Pread;
 
 use wholesym::SymbolManager;
 
 use crate::common::binary::MappedBinary;
+use crate::common::session::SessionCx;
 
 const RT_CONSISTENT: u64 = 0;
 const RT_ADD: u64 = 1;
@@ -57,22 +56,19 @@ impl RDebug {
     }
 
     /// Refresh the debuggee's state from its `r_debug` struct.
-    pub fn refresh<S>(
+    pub fn refresh(
         &mut self,
         lms: &mut IndexSet<LinkMap>,
         exe_addr: u64,
         symbol_manager: &Arc<SymbolManager>,
-        on_state_change: impl FnMut(DebugStateChange<S>),
-    ) -> crate::sys::Result<()>
-    where
-        S: DebugSession<MappedBinary = MappedBinary>,
-    {
+        session_cx: SessionCx<'_>,
+    ) -> crate::sys::Result<()> {
         let rstate = fetch_rstate(self.pid, self.elf_ctx, self.rdebug_addr)?;
 
         match (self.rstate, rstate) {
             (RT_CONSISTENT, RT_ADD | RT_DELETE) => (),
             (RT_ADD | RT_DELETE, RT_CONSISTENT) => {
-                self.update_lm(lms, exe_addr, symbol_manager, on_state_change)?
+                self.update_lm(lms, exe_addr, symbol_manager, session_cx)?
             }
             _ => {
                 return Err(crate::sys::Error::BadSoState(
@@ -89,28 +85,23 @@ impl RDebug {
 
     /// Reads the link map from the `r_debug` struct and update the input link
     /// map with it.
-    pub fn update_lm<S>(
+    pub fn update_lm(
         &self,
         lms: &mut IndexSet<LinkMap>,
         exe_addr: u64,
         symbol_manager: &Arc<SymbolManager>,
-        mut on_state_change: impl FnMut(DebugStateChange<S>),
-    ) -> crate::sys::Result<()>
-    where
-        S: DebugSession<MappedBinary = MappedBinary>,
-    {
+        mut session_cx: SessionCx<'_>,
+    ) -> crate::sys::Result<()> {
         let new_lms = fetch_link_maps(self.pid, self.elf_ctx, self.rdebug_addr, exe_addr)?
             .collect::<crate::sys::Result<IndexSet<LinkMap>>>()?;
 
         new_lms
             .difference(lms)
             .map(|lm| MappedBinary::new(lm.base_addr, Path::new(&lm.name), symbol_manager.clone()))
-            .map(|binary| DebugStateChange::BinaryLoaded(binary))
-            .for_each(&mut on_state_change);
+            .for_each(|binary| session_cx.on_binary_loaded(binary));
 
         lms.difference(&new_lms)
-            .map(|lm| DebugStateChange::BinaryUnloaded { addr: lm.base_addr })
-            .for_each(on_state_change);
+            .for_each(|lm| session_cx.on_binary_unloaded(lm.base_addr));
 
         *lms = new_lms;
 

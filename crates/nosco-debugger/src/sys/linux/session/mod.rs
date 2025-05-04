@@ -14,8 +14,6 @@ use nix::sys::signal::Signal;
 use nix::sys::wait::{waitpid, WaitStatus};
 use nix::unistd::Pid;
 
-use nosco_tracer::debugger::{DebugEvent, DebugSession, DebugStateChange};
-
 use wholesym::{SymbolManager, SymbolManagerConfig};
 
 pub use self::rdebug::LinkMap;
@@ -62,8 +60,7 @@ impl Session {
         scan.lms
             .iter()
             .map(|lm| MappedBinary::new(lm.base_addr, Path::new(&lm.name), symbol_manager.clone()))
-            .map(DebugStateChange::BinaryLoaded)
-            .for_each(|change| session_cx.push_debug_event(DebugEvent::StateInit(change)));
+            .for_each(|binary| session_cx.on_binary_loaded(binary));
 
         let rdebug_cx = RDebugContext::init(
             scan.rdebug_addr_loc,
@@ -74,9 +71,7 @@ impl Session {
         )?;
 
         if let RDebugContext::Init(ref rdebug) = rdebug_cx {
-            rdebug.update_lm(&mut scan.lms, scan.exe_addr, &symbol_manager, |change| {
-                session_cx.push_debug_event(DebugEvent::StateInit(change))
-            })?;
+            rdebug.update_lm(&mut scan.lms, scan.exe_addr, &symbol_manager, session_cx)?;
         }
 
         Ok(Session {
@@ -89,14 +84,11 @@ impl Session {
         })
     }
 
-    pub fn handle_internal_breakpoint<S>(
+    pub fn handle_internal_breakpoint(
         &mut self,
         addr: u64,
-        on_state_change: impl FnMut(DebugStateChange<S>),
-    ) -> crate::sys::Result<()>
-    where
-        S: DebugSession<MappedBinary = MappedBinary>,
-    {
+        session_cx: SessionCx<'_>,
+    ) -> crate::sys::Result<()> {
         let RDebugContext::Init(ref mut rdebug) = self.rdebug_cx else {
             return Ok(());
         };
@@ -109,7 +101,7 @@ impl Session {
                 &mut self.link_map,
                 self.exe_addr,
                 &self.symbol_manager,
-                on_state_change,
+                session_cx,
             )?;
         }
 

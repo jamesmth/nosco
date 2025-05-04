@@ -63,7 +63,11 @@ impl Session {
         let session = sys::Session::init(
             debuggee_handle,
             other_thread_ids,
-            SessionCx::new(&mut breakpoint_manager, &mut debug_events),
+            SessionCx {
+                breakpoint_manager: &mut breakpoint_manager,
+                debug_events: &mut debug_events,
+                stopped_thread_id: None,
+            },
         )
         .await?;
 
@@ -107,7 +111,11 @@ impl Session {
 
         let is_hardware_watchpoint = self.inner.handle_internal_watchpoint(
             thread_id,
-            SessionCx::new(&mut self.breakpoint_manager, &mut self.debug_events),
+            SessionCx {
+                breakpoint_manager: &mut self.breakpoint_manager,
+                debug_events: &mut self.debug_events,
+                stopped_thread_id: Some(thread_id),
+            },
         )?;
 
         if is_hardware_watchpoint {
@@ -143,11 +151,14 @@ impl Session {
                 self.set_registers(&thread, regs)?;
 
                 // handle (possible) internal breakpoint of debugger
-                self.inner
-                    .handle_internal_breakpoint(breakpoint.addr, |change| {
-                        self.debug_events
-                            .push_back(DebugEvent::StateUpdate { thread_id, change })
-                    })?;
+                self.inner.handle_internal_breakpoint(
+                    breakpoint.addr,
+                    SessionCx {
+                        breakpoint_manager: &mut self.breakpoint_manager,
+                        debug_events: &mut self.debug_events,
+                        stopped_thread_id: Some(thread_id),
+                    },
+                )?;
 
                 if *is_breakpoint_of_thread {
                     thread.instr_addr = breakpoint.addr;
@@ -503,27 +514,35 @@ impl DebugSession for Session {
 pub struct SessionCx<'a> {
     breakpoint_manager: &'a mut BreakpointManager,
     debug_events: &'a mut VecDeque<DebugEvent<Session>>,
+    stopped_thread_id: Option<u64>,
 }
 
-impl<'a> SessionCx<'a> {
-    fn new(
-        breakpoint_manager: &'a mut BreakpointManager,
-        debug_events: &'a mut VecDeque<DebugEvent<Session>>,
-    ) -> Self {
-        Self {
-            breakpoint_manager,
-            debug_events,
-        }
-    }
-
+impl SessionCx<'_> {
     pub fn add_internal_breakpoint(&mut self, addr: u64) -> sys::Result<()> {
         self.breakpoint_manager
             .add_breakpoint_or_increment_usage(addr)
             .map(|_| ())
     }
 
-    pub fn push_debug_event(&mut self, event: DebugEvent<Session>) {
+    pub fn on_binary_loaded(&mut self, binary: sys::MappedBinary) {
+        let change = DebugStateChange::BinaryLoaded(binary);
+
+        let event = if let Some(thread_id) = self.stopped_thread_id {
+            DebugEvent::StateUpdate { thread_id, change }
+        } else {
+            DebugEvent::StateInit(change)
+        };
+
         self.debug_events.push_back(event);
+    }
+
+    pub fn on_binary_unloaded(&mut self, addr: u64) {
+        if let Some(thread_id) = self.stopped_thread_id {
+            self.debug_events.push_back(DebugEvent::StateUpdate {
+                thread_id,
+                change: DebugStateChange::BinaryUnloaded { addr },
+            });
+        };
     }
 }
 
