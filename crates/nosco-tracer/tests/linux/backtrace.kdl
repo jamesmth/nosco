@@ -11,10 +11,10 @@ trace {
 
     call func5 {
         backtrace {
-            func1
-            func2+0x5
-            func3+0x4
-            func4
+            func1+0x5
+            func2+0xd
+            func3+0x9
+            func4+0x9
         }
     }
 }

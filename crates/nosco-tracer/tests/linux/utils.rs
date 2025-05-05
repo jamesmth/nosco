@@ -56,3 +56,41 @@ pub fn compile_tracee(
 
     out_file.into_temp_path()
 }
+
+pub fn compile_tracee_with_gcc(
+    asm_path: &Path,
+    is_64bit: bool,
+    is_pie: bool,
+    is_static: bool,
+) -> tempfile::TempPath {
+    let out_file = tempfile::NamedTempFile::new().expect("tempfile");
+
+    let mut gcc = Command::new("gcc");
+    gcc.arg(asm_path).arg("-o").arg(out_file.path());
+
+    if !is_64bit {
+        gcc.arg("-m32");
+    }
+
+    if is_pie && is_static {
+        gcc.arg("-static-pie");
+    } else if is_pie {
+        gcc.arg("-pie");
+    } else {
+        gcc.arg("-no-pie");
+        if is_static {
+            gcc.arg("-static");
+        }
+    }
+
+    println!("running: {gcc:?}");
+
+    let gcc = gcc.output().expect("gcc");
+
+    if !gcc.status.success() {
+        let msg = String::from_utf8_lossy(&gcc.stderr);
+        panic!("{msg}");
+    }
+
+    out_file.into_temp_path()
+}

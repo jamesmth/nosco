@@ -21,6 +21,7 @@ nosco-tracer = { path = "crates/nosco-tracer" }
 bincode = "2.0.1"
 byteorder = "1.5.0"
 capstone = { version = "0.13.0", features = ["full"] }
+framehop = { version = "0.13.2", default-features = false, features = ["std"] }
 futures-util = { version = "0.3.31", default-features = false }
 goblin = { version = "0.9.3", default-features = false }
 indexmap = "2.9.0"

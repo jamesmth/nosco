@@ -18,9 +18,9 @@ use wholesym::{SymbolManager, SymbolManagerConfig};
 
 pub use self::rdebug::LinkMap;
 use self::rdebug::RDebug;
+use super::binary::MappedBinary;
 use super::mem;
 use super::process::TracedProcessHandle;
-use crate::common::binary::MappedBinary;
 use crate::common::session::SessionCx;
 use crate::common::DebugStop;
 
@@ -57,21 +57,22 @@ impl Session {
 
         let mut scan = self::elf::scan_debuggee_exe(debuggee_handle.id()).await?;
 
-        scan.lms
-            .iter()
-            .map(|lm| MappedBinary::new(lm.base_addr, Path::new(&lm.name), symbol_manager.clone()))
-            .for_each(|binary| session_cx.on_binary_loaded(binary));
-
         let rdebug_cx = RDebugContext::init(
             scan.rdebug_addr_loc,
             scan.rdebug_addr,
             debuggee_handle.id(),
             scan.elf_ctx,
+            scan.exe_addr,
             &mut session_cx,
         )?;
 
         if let RDebugContext::Init(ref rdebug) = rdebug_cx {
-            rdebug.update_lm(&mut scan.lms, scan.exe_addr, &symbol_manager, session_cx)?;
+            scan.lms = rdebug.fetch_link_maps()?;
+        }
+
+        for LinkMap { base_addr, name } in scan.lms.iter() {
+            let binary = MappedBinary::new(*base_addr, Path::new(name), symbol_manager.clone());
+            session_cx.on_binary_loaded(binary).await;
         }
 
         Ok(Session {
@@ -84,10 +85,10 @@ impl Session {
         })
     }
 
-    pub fn handle_internal_breakpoint(
+    pub async fn handle_internal_breakpoint(
         &mut self,
         addr: u64,
-        session_cx: SessionCx<'_>,
+        mut session_cx: SessionCx<'_>,
     ) -> crate::sys::Result<()> {
         let RDebugContext::Init(ref mut rdebug) = self.rdebug_cx else {
             return Ok(());
@@ -97,12 +98,19 @@ impl Session {
             tracing::debug!("internal breakpoint (r_brk) triggered");
 
             // refresh the link map to detect loaded/unloaded binaries
-            rdebug.refresh(
-                &mut self.link_map,
-                self.exe_addr,
-                &self.symbol_manager,
-                session_cx,
-            )?;
+            if let Some(new_link_map) = rdebug.refresh()? {
+                for LinkMap { base_addr, name } in new_link_map.difference(&self.link_map) {
+                    let binary =
+                        MappedBinary::new(*base_addr, Path::new(name), self.symbol_manager.clone());
+                    session_cx.on_binary_loaded(binary).await;
+                }
+
+                self.link_map
+                    .difference(&new_link_map)
+                    .for_each(|lm| session_cx.on_binary_unloaded(lm.base_addr));
+
+                self.link_map = new_link_map;
+            }
         }
 
         Ok(())
@@ -143,6 +151,7 @@ impl Session {
             rdebug_addr,
             self.debuggee_handle.id(),
             self.elf_ctx,
+            self.exe_addr,
             &mut session_cx,
         )?;
 
@@ -218,6 +227,7 @@ impl RDebugContext {
         rdebug_addr: u64,
         debuggee_pid: Pid,
         elf_ctx: goblin::container::Ctx,
+        exe_addr: u64,
         session_cx: &mut SessionCx<'_>,
     ) -> crate::sys::Result<Self> {
         let cx = if rdebug_addr != 0 {
@@ -226,7 +236,7 @@ impl RDebugContext {
                 "r_debug address is set"
             );
 
-            let rdebug = RDebug::fetch(debuggee_pid, elf_ctx, rdebug_addr)?;
+            let rdebug = RDebug::fetch(debuggee_pid, elf_ctx, exe_addr, rdebug_addr)?;
 
             if rdebug.rbrk_addr != 0 {
                 tracing::debug!(

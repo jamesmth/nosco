@@ -91,6 +91,16 @@ async fn dlopen_32bit_pie_static() {
 }
 
 #[test(tokio::test)]
+async fn backtrace_depth4_64bit_pie() {
+    test_backtrace(4, true, true, false).await;
+}
+
+#[test(tokio::test)]
+async fn backtrace_depth4_64bit_nopie() {
+    test_backtrace(4, true, false, false).await;
+}
+
+#[test(tokio::test)]
 async fn recursive_ret_breakpoint() {
     let base_dir: PathBuf = "tests/linux".to_owned().into();
 
@@ -234,17 +244,16 @@ pub async fn test_trace_dlopen(is_64bit: bool, is_pie: bool, is_static: bool) {
     drop(tracee_path);
 }
 
-#[test(tokio::test)]
-#[ignore = "stack unwinder not implemented yet"]
-async fn backtrace_depth_4() {
+pub async fn test_backtrace(depth: usize, is_64bit: bool, is_pie: bool, is_static: bool) {
     let base_dir: PathBuf = "tests/linux".to_owned().into();
 
-    let asm_file = "backtrace.asm";
+    let asm_file = "backtrace.s";
 
-    let tracee_path = self::utils::compile_tracee(&base_dir.join(asm_file), true, false, false);
+    let tracee_path =
+        self::utils::compile_tracee_with_gcc(&base_dir.join(asm_file), is_64bit, is_pie, is_static);
     let tracee_name = tracee_path.file_name().unwrap().to_string_lossy();
 
-    let trace_handler = TestTraceHandler::new(tracee_name.to_string(), true, Some(4));
+    let trace_handler = TestTraceHandler::new(tracee_name.to_string(), true, Some(depth));
 
     let tracer = nosco_tracer::tracer::Tracer::builder()
         .with_debugger(nosco_debugger::Debugger)

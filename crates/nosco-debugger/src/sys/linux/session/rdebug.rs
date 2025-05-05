@@ -1,17 +1,9 @@
-use std::path::Path;
-use std::sync::Arc;
-
 use indexmap::IndexSet;
 
 use nix::sys::ptrace;
 use nix::unistd::Pid;
 
 use scroll::Pread;
-
-use wholesym::SymbolManager;
-
-use crate::common::binary::MappedBinary;
-use crate::common::session::SessionCx;
 
 const RT_CONSISTENT: u64 = 0;
 const RT_ADD: u64 = 1;
@@ -24,6 +16,9 @@ pub struct RDebug {
 
     /// ELF context (e.g., endianness) in the debuggee.
     elf_ctx: goblin::container::Ctx,
+
+    /// Executable address of the debuggee.
+    exe_addr: u64,
 
     /// `r_debug` address in the debuggee.
     rdebug_addr: u64,
@@ -41,6 +36,7 @@ impl RDebug {
     pub fn fetch(
         pid: Pid,
         elf_ctx: goblin::container::Ctx,
+        exe_addr: u64,
         rdebug_addr: u64,
     ) -> crate::sys::Result<Self> {
         let rstate = fetch_rstate(pid, elf_ctx, rdebug_addr)?;
@@ -49,6 +45,7 @@ impl RDebug {
         Ok(Self {
             pid,
             elf_ctx,
+            exe_addr,
             rdebug_addr,
             rbrk_addr,
             rstate,
@@ -56,56 +53,45 @@ impl RDebug {
     }
 
     /// Refresh the debuggee's state from its `r_debug` struct.
-    pub fn refresh(
-        &mut self,
-        lms: &mut IndexSet<LinkMap>,
-        exe_addr: u64,
-        symbol_manager: &Arc<SymbolManager>,
-        session_cx: SessionCx<'_>,
-    ) -> crate::sys::Result<()> {
+    ///
+    /// If an object was added/removed from the link map, the new link map is
+    /// returned.
+    pub fn refresh(&mut self) -> crate::sys::Result<Option<IndexSet<LinkMap>>> {
         let rstate = fetch_rstate(self.pid, self.elf_ctx, self.rdebug_addr)?;
 
-        match (self.rstate, rstate) {
-            (RT_CONSISTENT, RT_ADD | RT_DELETE) => (),
-            (RT_ADD | RT_DELETE, RT_CONSISTENT) => {
-                self.update_lm(lms, exe_addr, symbol_manager, session_cx)?
-            }
+        let lm = match (self.rstate, rstate) {
+            (RT_CONSISTENT, RT_ADD | RT_DELETE) => None,
+            (RT_ADD | RT_DELETE, RT_CONSISTENT) => self.fetch_link_maps().map(Some)?,
             _ => {
                 return Err(crate::sys::Error::BadSoState(
                     self.rstate as u8,
                     rstate as u8,
                 ))
             }
-        }
+        };
 
         self.rstate = rstate;
 
-        Ok(())
+        Ok(lm)
     }
 
     /// Reads the link map from the `r_debug` struct and update the input link
     /// map with it.
-    pub fn update_lm(
-        &self,
-        lms: &mut IndexSet<LinkMap>,
-        exe_addr: u64,
-        symbol_manager: &Arc<SymbolManager>,
-        mut session_cx: SessionCx<'_>,
-    ) -> crate::sys::Result<()> {
-        let new_lms = fetch_link_maps(self.pid, self.elf_ctx, self.rdebug_addr, exe_addr)?
-            .collect::<crate::sys::Result<IndexSet<LinkMap>>>()?;
+    pub fn fetch_link_maps(&self) -> crate::sys::Result<IndexSet<LinkMap>> {
+        let lm_addr = self.rdebug_addr + self.elf_ctx.size() as u64;
+        let mut addr = ptrace::read(self.pid, lm_addr as *mut _)? as u64;
 
-        new_lms
-            .difference(lms)
-            .map(|lm| MappedBinary::new(lm.base_addr, Path::new(&lm.name), symbol_manager.clone()))
-            .for_each(|binary| session_cx.on_binary_loaded(binary));
+        if !self.elf_ctx.is_big() {
+            addr &= 0xffffffff;
+        }
 
-        lms.difference(&new_lms)
-            .for_each(|lm| session_cx.on_binary_unloaded(lm.base_addr));
-
-        *lms = new_lms;
-
-        Ok(())
+        LinkMapIter {
+            pid: self.pid,
+            addr,
+            elf_ctx: self.elf_ctx,
+            exe_addr: self.exe_addr,
+        }
+        .collect()
     }
 }
 
@@ -137,28 +123,6 @@ fn fetch_rstate(
     }
 
     Ok(rstate)
-}
-
-/// Enumerates the shared objects loaded into the debuggee.
-fn fetch_link_maps(
-    pid: Pid,
-    elf_ctx: goblin::container::Ctx,
-    rdebug_addr: u64,
-    exe_addr: u64,
-) -> crate::sys::Result<impl Iterator<Item = crate::sys::Result<LinkMap>>> {
-    let lm_addr = rdebug_addr + elf_ctx.size() as u64;
-    let mut addr = ptrace::read(pid, lm_addr as *mut _)? as u64;
-
-    if !elf_ctx.is_big() {
-        addr &= 0xffffffff;
-    }
-
-    Ok(LinkMapIter {
-        pid,
-        addr,
-        elf_ctx,
-        exe_addr,
-    })
 }
 
 struct LinkMapIter {

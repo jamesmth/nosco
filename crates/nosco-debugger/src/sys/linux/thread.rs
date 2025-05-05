@@ -12,6 +12,11 @@ use nosco_tracer::debugger::{RegistersAarch64, RegistersArm, RegistersX86, Regis
 
 use crate::Session;
 
+#[cfg(target_arch = "x86_64")]
+type StackUnwinderRegisters = framehop::x86_64::UnwindRegsX86_64;
+#[cfg(target_arch = "aarch64")]
+type StackUnwinderRegisters = framehop::aarch64::UnwindRegsAarch64;
+
 pub fn resume_thread(thread_id: u64, single_step: bool) -> crate::sys::Result<()> {
     if single_step {
         ptrace::step(Pid::from_raw(thread_id as i32), None)?;
@@ -148,6 +153,26 @@ impl Registers {
                     <Registers64 as RegistersAarch64<Session>>::assign_to_thread(
                         regs, session, thread,
                     )
+                }
+            }
+        }
+    }
+
+    pub fn to_unwind(&self) -> Option<StackUnwinderRegisters> {
+        match self {
+            Self::B32(_) => None, // `framehop` doesn't support 32-bit architectures yet
+            Self::B64(regs) => {
+                #[cfg(target_arch = "x86_64")]
+                {
+                    Some(StackUnwinderRegisters::new(
+                        regs.rip(),
+                        regs.rsp(),
+                        regs.rbp(),
+                    ))
+                }
+                #[cfg(target_arch = "aarch64")]
+                {
+                    Some(StackUnwinderRegisters::new(self.lr(), self.sp(), self.fp()))
                 }
             }
         }

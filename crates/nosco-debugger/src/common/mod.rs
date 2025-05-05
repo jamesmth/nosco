@@ -1,4 +1,3 @@
-pub mod binary;
 pub mod breakpoint;
 pub mod debugger;
 pub mod session;

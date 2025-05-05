@@ -1,3 +1,4 @@
+mod binary;
 mod error;
 pub mod mem;
 pub mod process;
@@ -15,10 +16,10 @@ use nix::unistd::{chdir, dup2, execvp, fork, pipe2, ForkResult};
 use nosco_tracer::tracer::TracedProcessStdio;
 use nosco_tracer::Command;
 
+pub use self::binary::MappedBinary;
 pub use self::error::{Error, Result};
 use self::process::TracedProcessHandle;
 pub use self::session::Session;
-pub use crate::common::binary::MappedBinary;
 
 /// Spawns a new child process.
 ///
