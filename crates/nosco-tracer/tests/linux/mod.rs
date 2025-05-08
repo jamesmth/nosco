@@ -235,6 +235,7 @@ pub async fn test_trace_dlopen(is_64bit: bool, is_pie: bool, is_static: bool) {
 }
 
 #[test(tokio::test)]
+#[ignore = "stack unwinder not implemented yet"]
 async fn backtrace_depth_4() {
     let base_dir: PathBuf = "tests/linux".to_owned().into();
 

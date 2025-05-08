@@ -11,9 +11,9 @@ pub use self::builder::Builder;
 use self::builder::NeedsDebugger;
 use self::state::{FullTraceState, ScopedTraceConfig, ScopedTraceState};
 pub use self::tracee::{TracedProcess, TracedProcessStdio};
-use crate::debugger::{BinaryInformation, DebugEvent, DebugStateChange, Debugger};
-use crate::debugger::{CpuInstruction, CpuInstructionType};
-use crate::debugger::{DebugSession, Thread};
+use crate::debugger::{BinaryInformation, DebugEvent, DebugStateChange, Debugger, ThreadRegisters};
+use crate::debugger::{CpuInstruction, CpuInstructionType, DebugSession, Thread};
+use crate::debugger::{RegistersAarch64, RegistersArm, RegistersX86, RegistersX86_64};
 use crate::error::{DebuggerError, HandlerError};
 use crate::handler::EventHandler;
 use crate::Command;
@@ -180,12 +180,7 @@ where
                 // single-step once it returns (we still want to catch the fact that the
                 // function returned)
 
-                let mut regs = self.session.get_registers(thread).map_err(DebuggerError)?;
-                let ret_addr = self
-                    .session
-                    .compute_return_address(thread, &mut regs)
-                    .map_err(DebuggerError)?
-                    .ok_or(crate::Error::NoReturnAddress)?;
+                let ret_addr = self.compute_return_address_at_call_start(thread)?;
 
                 let is_first_time = self
                     .state
@@ -272,12 +267,7 @@ where
             if max_depth_exceeded {
                 // add breakpoint to return address
 
-                let mut regs = self.session.get_registers(thread).map_err(DebuggerError)?;
-                let ret_addr = self
-                    .session
-                    .compute_return_address(thread, &mut regs)
-                    .map_err(DebuggerError)?
-                    .ok_or(crate::Error::NoReturnAddress)?;
+                let ret_addr = self.compute_return_address_at_call_start(thread)?;
 
                 let is_first_time = self
                     .state
@@ -415,6 +405,44 @@ where
                 Ok(())
             }
         }
+    }
+
+    fn compute_return_address_at_call_start(
+        &mut self,
+        thread: &S::StoppedThread,
+    ) -> crate::Result<u64, S::Error, H::Error> {
+        let regs = self.session.get_registers(thread).map_err(DebuggerError)?;
+
+        let ret_addr = match regs {
+            ThreadRegisters::X86(regs) => {
+                let mut buf = [0u8; 4];
+                self.session
+                    .read_memory(regs.esp() as u64, &mut buf)
+                    .map_err(DebuggerError)?;
+
+                if self.session.binary_ctx().is_little_endian {
+                    u32::from_le_bytes(buf) as u64
+                } else {
+                    u32::from_be_bytes(buf) as u64
+                }
+            }
+            ThreadRegisters::X86_64(regs) => {
+                let mut buf = [0u8; 8];
+                self.session
+                    .read_memory(regs.rsp(), &mut buf)
+                    .map_err(DebuggerError)?;
+
+                if self.session.binary_ctx().is_little_endian {
+                    u64::from_le_bytes(buf)
+                } else {
+                    u64::from_be_bytes(buf)
+                }
+            }
+            ThreadRegisters::Arm(regs) => regs.lr() as u64,
+            ThreadRegisters::Aarch64(regs) => regs.lr(),
+        };
+
+        Ok(ret_addr)
     }
 }
 
