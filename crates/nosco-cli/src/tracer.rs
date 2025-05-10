@@ -1,5 +1,4 @@
 use nosco_storage::TraceSessionStorageWriter;
-
 use nosco_tracer::debugger::{BinaryInformation, DebugSession, Thread};
 use nosco_tracer::handler::EventHandler;
 

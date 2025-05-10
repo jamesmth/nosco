@@ -1,15 +1,11 @@
 use std::collections::VecDeque;
 
 use capstone::arch::BuildsCapstone;
-
 use framehop::{FrameAddress, MayAllocateDuringUnwind, Unwinder};
-
 use nosco_tracer::debugger::{BinaryContext, BinaryInformation, Thread, ThreadRegisters};
 use nosco_tracer::debugger::{CpuInstruction, CpuInstructionType};
 use nosco_tracer::debugger::{DebugEvent, DebugSession, DebugStateChange};
-
 use tracing::Instrument;
-
 use wholesym::samply_symbols::pdb::FallibleIterator;
 
 use super::DebugStop;

@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use kdl::{KdlDocument, KdlNode};
-
 use nosco_tracer::debugger::BinaryView;
-
 use regex::Regex;
 
 type MappedBinary = <nosco_debugger::Session as nosco_tracer::debugger::DebugSession>::MappedBinary;

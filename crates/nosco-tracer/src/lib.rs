@@ -16,7 +16,6 @@
 //!
 //! ```no_run
 //! use nosco_debugger::{Debugger, Session};
-//!
 //! use nosco_tracer::Command;
 //! use nosco_tracer::debugger::DebugSession;
 //! use nosco_tracer::handler::EventHandler;

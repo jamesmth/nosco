@@ -7,7 +7,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use mla::config::ArchiveWriterConfig;
 use mla::{ArchiveWriter, Layers};
-
 use serde::Serialize;
 
 use super::content::{CallData, CallMetadata, StateChangeData, StateInitData};

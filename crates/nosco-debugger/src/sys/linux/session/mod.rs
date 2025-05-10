@@ -7,13 +7,11 @@ use std::path::Path;
 use std::sync::Arc;
 
 use indexmap::IndexSet;
-
 use nix::libc::{PTRACE_EVENT_CLONE, PTRACE_EVENT_EXIT};
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::Pid;
-
 use wholesym::{SymbolManager, SymbolManagerConfig};
 
 pub use self::rdebug::LinkMap;

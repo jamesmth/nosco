@@ -12,7 +12,6 @@ use std::os::unix::ffi::OsStringExt;
 use nix::fcntl::OFlag;
 use nix::sys::ptrace;
 use nix::unistd::{ForkResult, chdir, dup2, execvp, fork, pipe2};
-
 use nosco_tracer::Command;
 use nosco_tracer::tracer::TracedProcessStdio;
 

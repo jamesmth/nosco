@@ -2,9 +2,7 @@ use std::io::{Read, Seek};
 use std::path::PathBuf;
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};
-
 use miette::IntoDiagnostic;
-
 use nosco_storage::MlaStorageReader;
 use nosco_storage::content::{StateChangeData, StateUpdateOrigin};
 

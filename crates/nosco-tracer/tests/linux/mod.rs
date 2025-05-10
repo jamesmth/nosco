@@ -3,9 +3,7 @@ mod utils;
 use std::path::PathBuf;
 
 use kdl::KdlDocument;
-
 use test_log::test;
-
 use tokio::io::AsyncReadExt;
 
 use crate::common::TestTraceHandler;

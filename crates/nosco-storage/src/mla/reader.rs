@@ -3,11 +3,9 @@ use std::marker::PhantomData;
 use std::vec::IntoIter;
 
 use either::Either;
-
 use mla::config::ArchiveReaderConfig;
 use mla::layers::traits::LayerReader;
 use mla::{ArchiveFile, ArchiveReader, BlocksToFileReader};
-
 use serde::de::DeserializeOwned;
 
 use super::content::{CallData, CallMetadata, StateChangeData, StateInitData};

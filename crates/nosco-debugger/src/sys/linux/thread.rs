@@ -6,7 +6,6 @@ use nix::libc;
 use nix::sys::ptrace::regset::NT_PRSTATUS;
 use nix::sys::ptrace::{self, RegisterSet};
 use nix::unistd::Pid;
-
 use nosco_tracer::debugger::{DebugSession, Thread};
 use nosco_tracer::debugger::{RegistersAarch64, RegistersArm, RegistersX86, RegistersX86_64};
 

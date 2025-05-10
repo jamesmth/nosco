@@ -6,18 +6,12 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use miette::IntoDiagnostic;
-
 use nosco_cli::{CliAction, CliDumpAction, CliOpts, TraceConfig, TraceEventHandler};
-
 use nosco_debugger::Debugger;
-
 use nosco_storage::MlaStorageWriter;
-
 use nosco_tracer::Command;
 use nosco_tracer::tracer::Tracer;
-
 use tokio::process::{ChildStderr, ChildStdout};
-
 use tracing_subscriber::EnvFilter;
 
 fn main() {

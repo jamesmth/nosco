@@ -1,8 +1,6 @@
 use indexmap::IndexSet;
-
 use nix::sys::ptrace;
 use nix::unistd::Pid;
-
 use scroll::Pread;
 
 const RT_CONSISTENT: u64 = 0;

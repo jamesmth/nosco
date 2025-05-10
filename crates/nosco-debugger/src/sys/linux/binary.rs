@@ -7,9 +7,7 @@ use goblin::elf::program_header::PT_LOAD;
 use goblin::elf::section_header::{SHN_UNDEF, SHN_XINDEX};
 use goblin::elf::{Elf, ProgramHeader, SectionHeader};
 use goblin::strtab::Strtab;
-
 use tracing::Instrument;
-
 use wholesym::{LookupAddress, SymbolManager, SymbolMap};
 
 /// Loaded image.

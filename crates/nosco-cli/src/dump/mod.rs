@@ -6,7 +6,6 @@ mod thread_info;
 use std::io::{Read, Seek, Write};
 
 use miette::IntoDiagnostic;
-
 use nosco_storage::MlaStorageReader;
 
 use self::call_info::CallInformation;

@@ -1,19 +1,15 @@
 use std::path::PathBuf;
 
 use futures_util::TryStreamExt;
-
 use goblin::elf::dynamic::{DT_DEBUG, DT_NULL};
 use goblin::elf::header::{EM_386, EM_ARM, EM_X86_64, ET_DYN};
 use goblin::elf::program_header::{PT_DYNAMIC, PT_INTERP, PT_LOAD};
 use goblin::elf::section_header::SHT_SYMTAB;
 use goblin::elf::{Dyn, Elf, ProgramHeader, ProgramHeaders, SectionHeader, Symtab};
 use goblin::strtab::Strtab;
-
 use indexmap::IndexSet;
-
 use nix::libc::{AT_BASE, AT_ENTRY, AT_PHDR, AT_PHNUM, AT_SYSINFO_EHDR};
 use nix::unistd::Pid;
-
 use scroll::Pread;
 
 use super::LinkMap;

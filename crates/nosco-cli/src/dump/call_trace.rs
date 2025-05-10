@@ -4,11 +4,8 @@ use std::vec::IntoIter;
 
 use capstone::Capstone;
 use capstone::arch::BuildsCapstone;
-
 use kdl::{KdlDocument, KdlEntry, KdlNode};
-
 use miette::IntoDiagnostic;
-
 use nosco_storage::MlaStorageReader;
 use nosco_storage::content::CallData;
 
