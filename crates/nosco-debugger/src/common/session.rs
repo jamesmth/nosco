@@ -1,9 +1,7 @@
 use std::collections::VecDeque;
 
-use capstone::arch::BuildsCapstone;
 use framehop::{FrameAddress, MayAllocateDuringUnwind, Unwinder};
 use nosco_tracer::debugger::{BinaryContext, BinaryInformation, Thread, ThreadRegisters};
-use nosco_tracer::debugger::{CpuInstruction, CpuInstructionType};
 use nosco_tracer::debugger::{DebugEvent, DebugSession, DebugStateChange};
 use tracing::Instrument;
 use wholesym::samply_symbols::pdb::FallibleIterator;
@@ -13,11 +11,6 @@ use super::breakpoint::BreakpointManager;
 use super::thread::ThreadManager;
 use crate::sys;
 use crate::sys::process::TracedProcessHandle;
-
-#[cfg(target_arch = "aarch64")]
-const MAX_OPCODES_LEN: usize = 4;
-#[cfg(target_arch = "x86_64")]
-const MAX_OPCODES_LEN: usize = 15;
 
 #[cfg(target_arch = "x86_64")]
 type StackUnwinder = framehop::x86_64::UnwinderX86_64<Vec<u8>, MayAllocateDuringUnwind>;
@@ -42,9 +35,6 @@ pub struct Session {
     /// Thread manager.
     thread_manager: ThreadManager,
 
-    /// Instruction disassembler.
-    disass: capstone::Capstone,
-
     /// Stack frame unwinder.
     unwinder: StackUnwinder,
 }
@@ -55,20 +45,6 @@ impl Session {
         debuggee_handle: TracedProcessHandle,
         other_thread_ids: &[u64],
     ) -> crate::Result<Self> {
-        let disass = if cfg!(target_arch = "x86_64") {
-            capstone::Capstone::new()
-                .x86()
-                .mode(capstone::arch::x86::ArchMode::Mode64) // FIXME: mode may change at debuggee's runtime?
-                .build()?
-        } else if cfg!(target_arch = "aarch64") {
-            capstone::Capstone::new()
-                .arm64()
-                .mode(capstone::arch::arm64::ArchMode::Arm)
-                .build()?
-        } else {
-            unimplemented!("bad arch")
-        };
-
         let mut breakpoint_manager = BreakpointManager::new(debuggee_handle.raw_id());
 
         let mut debug_events = VecDeque::new();
@@ -113,7 +89,6 @@ impl Session {
             debug_events,
             breakpoint_manager,
             thread_manager,
-            disass,
             unwinder,
         })
     }
@@ -337,37 +312,6 @@ impl DebugSession for Session {
             .register_remove_breakpoint(thread.into().map(|th| th.id()), addr);
 
         Ok(())
-    }
-
-    fn read_cpu_instruction(&self, addr: u64) -> Result<CpuInstruction, Self::Error> {
-        let mut opcodes = [0u8; MAX_OPCODES_LEN];
-        self.read_memory(addr, &mut opcodes)?;
-
-        let asm = self.disass.disasm_count(&opcodes, addr, 1)?;
-
-        let Some(instr) = asm.first() else {
-            unreachable!("FIXME error");
-        };
-
-        let ty = match instr.mnemonic() {
-            #[cfg(target_arch = "x86_64")]
-            Some("call") => CpuInstructionType::FnCall,
-            #[cfg(target_arch = "aarch64")]
-            Some("bl") | Some("blaa") | Some("blaaz") | Some("blab") | Some("blabz")
-            | Some("blr") | Some("blraa") | Some("blraaz") | Some("blrab") | Some("blrabz") => {
-                CpuInstructionType::FnCall
-            }
-            #[cfg(target_arch = "x86_64")]
-            Some("ret") => CpuInstructionType::FnRet,
-            #[cfg(target_arch = "aarch64")]
-            Some("ret") | Some("retaa") | Some("retab") => CpuInstructionType::FnRet,
-            _ => CpuInstructionType::Other,
-        };
-
-        Ok(CpuInstruction {
-            ty,
-            opcodes: opcodes.to_vec(),
-        })
     }
 
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> Result<(), Self::Error> {

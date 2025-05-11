@@ -61,9 +61,6 @@ pub trait DebugSession {
     /// Debuggee's binary context (size, endianness).
     fn binary_ctx(&self) -> BinaryContext;
 
-    /// Reads a single CPU instruction from the debuggee's address space.
-    fn read_cpu_instruction(&self, addr: u64) -> Result<CpuInstruction, Self::Error>;
-
     /// Reads data from the debuggee's address space.
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> Result<(), Self::Error>;
 
@@ -169,28 +166,6 @@ pub enum DebugStateChange<S: DebugSession + ?Sized> {
         /// Image base address before unloading.
         addr: u64,
     },
-}
-
-/// CPU instruction type (arch-independent).
-#[derive(Clone, Copy)]
-pub enum CpuInstructionType {
-    /// Function call instruction.
-    FnCall,
-
-    /// Function return instruction.
-    FnRet,
-
-    /// Other type of instruction.
-    Other,
-}
-
-/// CPU instruction.
-pub struct CpuInstruction {
-    /// CPU instruction type.
-    pub ty: CpuInstructionType,
-
-    /// CPU instruction opcodes.
-    pub opcodes: Vec<u8>,
 }
 
 /// Binary context (container size, byte endianness).

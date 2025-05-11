@@ -1498,7 +1498,6 @@ name = "nosco-debugger"
 version = "0.0.0-reserved"
 dependencies = [
  "byteorder",
- "capstone",
  "framehop",
  "futures-util",
  "goblin",

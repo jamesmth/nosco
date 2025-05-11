@@ -1,11 +1,6 @@
 /// Error type of this crate.
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    /// Error from the [capstone] crate.
-    #[cfg(target_arch = "x86_64")]
-    #[error(transparent)]
-    Disassembler(#[from] capstone::Error),
-
     /// Invalid CPU instruction error.
     #[error("Invalid CPU instruction at {0:#x}")]
     BadCpuInstruction(u64),

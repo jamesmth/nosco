@@ -1,4 +1,5 @@
 mod builder;
+mod opcode;
 mod state;
 mod tracee;
 
@@ -9,11 +10,12 @@ use tracing::Instrument;
 
 pub use self::builder::Builder;
 use self::builder::NeedsDebugger;
+use self::opcode::{Opcodes, OpcodesType};
 use self::state::{FullTraceState, ScopedTraceConfig, ScopedTraceState};
 pub use self::tracee::{TracedProcess, TracedProcessStdio};
 use crate::Command;
 use crate::debugger::{BinaryInformation, DebugEvent, DebugStateChange, Debugger, ThreadRegisters};
-use crate::debugger::{CpuInstruction, CpuInstructionType, DebugSession, Thread};
+use crate::debugger::{DebugSession, Thread};
 use crate::debugger::{RegistersAarch64, RegistersArm, RegistersX86, RegistersX86_64};
 use crate::error::{DebuggerError, HandlerError};
 use crate::handler::EventHandler;
@@ -106,7 +108,7 @@ where
     #[tracing::instrument(name = "Trace", skip_all, fields(mode = self.state.label()))]
     pub async fn run(mut self) -> crate::Result<(i32, H), S::Error, H::Error> {
         // previously executed CPU instruction by threads (ID)
-        let mut prev_instrs = HashMap::<u64, (u64, CpuInstruction)>::new();
+        let mut prev_instrs = HashMap::<u64, (u64, Opcodes)>::new();
 
         loop {
             match self.session.wait_event().await.map_err(DebuggerError)? {
@@ -158,7 +160,7 @@ where
     async fn handle_tracee_thread_breakpoint(
         &mut self,
         thread: &mut S::StoppedThread,
-        prev_instr: VacantEntry<'_, u64, (u64, CpuInstruction)>,
+        prev_instr: VacantEntry<'_, u64, (u64, Opcodes)>,
     ) -> crate::Result<(), S::Error, H::Error> {
         let switch_to_singlestep = if self.state.is_traced_function(thread.instr_addr()) {
             tracing::info!("traced function called");
@@ -220,10 +222,8 @@ where
         };
 
         if switch_to_singlestep {
-            let cur_instr = self
-                .session
-                .read_cpu_instruction(thread.instr_addr())
-                .map_err(DebuggerError)?;
+            let cur_instr =
+                Opcodes::read_once(&self.session, thread.instr_addr()).map_err(DebuggerError)?;
 
             prev_instr.insert((thread.instr_addr(), cur_instr));
 
@@ -236,22 +236,25 @@ where
     async fn handle_tracee_thread_single_step(
         &mut self,
         thread: &mut S::StoppedThread,
-        mut prev_instr: OccupiedEntry<'_, u64, (u64, CpuInstruction)>,
+        mut prev_instr: OccupiedEntry<'_, u64, (u64, Opcodes)>,
     ) -> crate::Result<(), S::Error, H::Error> {
-        let cur_instr = self
-            .session
-            .read_cpu_instruction(thread.instr_addr())
-            .map_err(DebuggerError)?;
+        let cur_instr =
+            Opcodes::read_once(&self.session, thread.instr_addr()).map_err(DebuggerError)?;
 
         let (exec_addr, exec_instr) =
             std::mem::replace(prev_instr.get_mut(), (thread.instr_addr(), cur_instr));
 
         self.handler
-            .instruction_executed(&mut self.session, thread, exec_addr, exec_instr.opcodes)
+            .instruction_executed(
+                &mut self.session,
+                thread,
+                exec_addr,
+                exec_instr.bytes.to_vec(),
+            )
             .await
             .map_err(HandlerError)?;
 
-        let disable_singlestep = if let CpuInstructionType::FnCall = exec_instr.ty {
+        let disable_singlestep = if let Some(OpcodesType::Call) = exec_instr.ty {
             self.handler
                 .function_entered(&mut self.session, thread)
                 .await
@@ -281,7 +284,7 @@ where
             }
 
             max_depth_exceeded
-        } else if let CpuInstructionType::FnRet = exec_instr.ty {
+        } else if let Some(OpcodesType::Ret) = exec_instr.ty {
             self.handler
                 .function_returned(&mut self.session, thread)
                 .await
@@ -308,7 +311,7 @@ where
         &mut self,
         thread_id: Option<u64>,
         state_change: DebugStateChange<S>,
-        prev_instrs: &mut HashMap<u64, (u64, CpuInstruction)>,
+        prev_instrs: &mut HashMap<u64, (u64, Opcodes)>,
     ) -> crate::Result<(), S::Error, H::Error> {
         match state_change {
             DebugStateChange::BinaryLoaded(binary) => {
@@ -365,9 +368,7 @@ where
                         if !max_depth_exceeded {
                             // enable single-step
 
-                            let cur_instr = self
-                                .session
-                                .read_cpu_instruction(thread.instr_addr())
+                            let cur_instr = Opcodes::read_once(&self.session, thread.instr_addr())
                                 .map_err(DebuggerError)?;
 
                             prev_instrs.insert(thread.id(), (thread.instr_addr(), cur_instr));
