@@ -46,6 +46,9 @@ pub fn read_process_memory(process_id: u64, addr: u64, buf: &mut [u8]) -> crate:
             1,
             0,
         ))
+        .inspect_err(
+            |e| tracing::error!(error = %e, addr = format_args!("{addr:#x}"), "process_vm_readv"),
+        )
         .map(|len| len as usize)?
     };
 

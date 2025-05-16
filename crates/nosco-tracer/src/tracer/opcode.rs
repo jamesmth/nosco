@@ -52,26 +52,29 @@ fn is_call_32(opcodes: [u8; MAX_OPCODES_LEN]) -> bool {
     // whether the byte is an operand-size override prefix
     let is_ope = |b: u8| b == 0x66;
 
+    // whether the ModR/M byte has the opcode extension of a call
+    let is_cal_ext = |b: u8| ((b >> 3) & 7) == 2 || ((b >> 3) & 7) == 3;
+
     // whether the byte is a 'call' mnemonic
-    let is_cal = |b: u8| b == 0xff || b == 0xe8 || b == 0x9a;
+    let is_cal = |b1: u8, b2: u8| (b1 == 0xff && is_cal_ext(b2)) || b1 == 0xe8 || b1 == 0x9a;
 
     let o = opcodes;
 
-    if is_cal(o[0]) {
+    if is_cal(o[0], o[1]) {
         return true;
     }
 
-    if is_cal(o[1]) && (is_ope(o[0]) || is_adr(o[0]) || is_seg(o[0])) {
+    if is_cal(o[1], o[2]) && (is_ope(o[0]) || is_adr(o[0]) || is_seg(o[0])) {
         return true;
     }
 
-    if is_cal(o[2])
+    if is_cal(o[2], o[3])
         && ((is_ope(o[1]) && (is_adr(o[0]) || is_seg(o[0]))) || (is_adr(o[1]) && is_seg(o[0])))
     {
         return true;
     }
 
-    is_cal(o[3]) && is_ope(o[2]) && is_adr(o[1]) && is_seg(o[0])
+    is_cal(o[3], o[4]) && is_ope(o[2]) && is_adr(o[1]) && is_seg(o[0])
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -101,20 +104,23 @@ fn is_call_64(opcodes: [u8; MAX_OPCODES_LEN]) -> bool {
     // whether the byte is a REX prefix
     let is_rex = |b: u8| (b & 0xf0) == 0x40;
 
+    // whether the ModR/M byte has the opcode extension of a call
+    let is_cal_ext = |b: u8| ((b >> 3) & 7) == 2 || ((b >> 3) & 7) == 3;
+
     // whether the byte is a 'call' mnemonic
-    let is_cal = |b: u8| b == 0xff || b == 0xe8;
+    let is_cal = |b1: u8, b2: u8| (b1 == 0xff && is_cal_ext(b2)) || b1 == 0xe8;
 
     let o = opcodes;
 
-    if is_cal(o[0]) {
+    if is_cal(o[0], o[1]) {
         return true;
     }
 
-    if is_cal(o[1]) && (is_rex(o[0]) || is_ope(o[0]) || is_adr(o[0]) || is_seg(o[0])) {
+    if is_cal(o[1], o[2]) && (is_rex(o[0]) || is_ope(o[0]) || is_adr(o[0]) || is_seg(o[0])) {
         return true;
     }
 
-    if is_cal(o[2])
+    if is_cal(o[2], o[3])
         && ((is_rex(o[1]) && (is_ope(o[0]) || is_adr(o[0]) || is_seg(o[0])))
             || (is_ope(o[1]) && (is_adr(o[0]) || is_seg(o[0])))
             || (is_adr(o[1]) && is_seg(o[0])))
@@ -122,7 +128,7 @@ fn is_call_64(opcodes: [u8; MAX_OPCODES_LEN]) -> bool {
         return true;
     }
 
-    if is_cal(o[3])
+    if is_cal(o[3], o[4])
         && ((is_rex(o[2]) && is_ope(o[1]) && (is_adr(o[0]) || is_seg(o[0])))
             || (is_rex(o[2]) && is_adr(o[1]) && is_seg(o[0]))
             || (is_ope(o[2]) && is_adr(o[1]) && is_seg(o[0])))
@@ -130,7 +136,7 @@ fn is_call_64(opcodes: [u8; MAX_OPCODES_LEN]) -> bool {
         return true;
     }
 
-    is_cal(o[4]) && is_rex(o[3]) && is_ope(o[2]) && is_adr(o[1]) && is_seg(o[0])
+    is_cal(o[4], o[5]) && is_rex(o[3]) && is_ope(o[2]) && is_adr(o[1]) && is_seg(o[0])
 }
 
 #[cfg(target_arch = "aarch64")]
