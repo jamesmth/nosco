@@ -70,6 +70,9 @@ pub fn evaluate_run(
             })
             .into_diagnostic()?;
 
+        let mut stdin = stdio.stdin;
+        std::thread::spawn(move || std::io::copy(&mut std::io::stdin(), &mut stdin));
+
         let (exit_code, event_handler) = process.resume_and_trace().await.into_diagnostic()?;
 
         let _ = stdout.await;
