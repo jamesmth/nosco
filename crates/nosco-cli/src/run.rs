@@ -52,7 +52,7 @@ pub fn evaluate_run(
 
         let command = Command::new(program).args(args);
 
-        let (process, stdio) = tracer.spawn(command).await.into_diagnostic()?;
+        let (mut process, stdio) = tracer.spawn(command).await.into_diagnostic()?;
 
         let stdout = ChildStdout::from_std(stdio.stdout)
             .map(|mut stdout| {
@@ -73,12 +73,16 @@ pub fn evaluate_run(
         let mut stdin = stdio.stdin;
         std::thread::spawn(move || std::io::copy(&mut std::io::stdin(), &mut stdin));
 
-        let (exit_code, event_handler) = process.resume_and_trace().await.into_diagnostic()?;
+        let exit_code = process.resume_and_trace().await.into_diagnostic()?;
 
         let _ = stdout.await;
         let _ = stderr.await;
 
-        event_handler.finalize_storage().await.into_diagnostic()?;
+        process
+            .into_inner()
+            .finalize_storage()
+            .await
+            .into_diagnostic()?;
 
         Ok(exit_code)
     })

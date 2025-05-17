@@ -23,9 +23,9 @@ pub enum Error<E1, E2> {
     #[error("Symbol {1} not found in {0}")]
     SymbolNotFound(String, String),
 
-    /// The debugger didn't compute the return address of a function.
-    #[error("Debugger didn't compute a return address")]
-    NoReturnAddress,
+    /// The tracee was previously resumed.
+    #[error("Tracee previously resumed")]
+    TraceeAlreadyResumed,
 }
 
 /// Result type of this crate.

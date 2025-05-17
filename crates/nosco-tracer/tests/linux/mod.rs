@@ -116,17 +116,17 @@ async fn recursive_ret_breakpoint() {
         .scope(tracee_name, "foo", 0)
         .build();
 
-    let (tracee, _) = tracer
+    let (mut tracee, _) = tracer
         .spawn(nosco_tracer::Command::new(&tracee_path))
         .await
         .expect("spawn");
 
-    let (exit_code, trace_handler) = tracee.resume_and_trace().await.expect("run");
+    let exit_code = tracee.resume_and_trace().await.expect("run");
     assert_eq!(exit_code, 0);
 
     let trace_file = "recursive_ret_breakpoint.kdl";
 
-    let mut generated_trace = trace_handler.into_kdl();
+    let mut generated_trace = tracee.into_inner().into_kdl();
     let mut expected_trace = tokio::fs::read_to_string(base_dir.join(trace_file))
         .await
         .map(|s| KdlDocument::parse(&s).expect("parse"))
@@ -158,12 +158,12 @@ pub async fn test_trace_hello(is_64bit: bool, is_pie: bool, is_static: bool) {
         .scope(tracee_name, "main", 1)
         .build();
 
-    let (tracee, tracee_stdio) = tracer
+    let (mut tracee, tracee_stdio) = tracer
         .spawn(nosco_tracer::Command::new(&tracee_path))
         .await
         .expect("spawn");
 
-    let (exit_code, trace_handler) = tracee.resume_and_trace().await.expect("run");
+    let exit_code = tracee.resume_and_trace().await.expect("run");
     assert_eq!(exit_code, 0);
 
     let mut stdout = tokio::process::ChildStdout::from_std(tracee_stdio.stdout).expect("stdout");
@@ -182,7 +182,7 @@ pub async fn test_trace_hello(is_64bit: bool, is_pie: bool, is_static: bool) {
         if is_static { ".static" } else { "" }
     );
 
-    let mut generated_trace = trace_handler.into_kdl();
+    let mut generated_trace = tracee.into_inner().into_kdl();
     let mut expected_trace = tokio::fs::read_to_string(base_dir.join(trace_file))
         .await
         .map(|s| KdlDocument::parse(&s).expect("parse"))
@@ -214,12 +214,12 @@ pub async fn test_trace_dlopen(is_64bit: bool, is_pie: bool, is_static: bool) {
         .scope(tracee_name, "main", 1)
         .build();
 
-    let (tracee, _) = tracer
+    let (mut tracee, _) = tracer
         .spawn(nosco_tracer::Command::new(&tracee_path))
         .await
         .expect("spawn");
 
-    let (exit_code, trace_handler) = tracee.resume_and_trace().await.expect("run");
+    let exit_code = tracee.resume_and_trace().await.expect("run");
     assert_eq!(exit_code, 0);
 
     let trace_file = format!(
@@ -228,7 +228,7 @@ pub async fn test_trace_dlopen(is_64bit: bool, is_pie: bool, is_static: bool) {
         if is_static { ".static" } else { "" }
     );
 
-    let mut generated_trace = trace_handler.into_kdl();
+    let mut generated_trace = tracee.into_inner().into_kdl();
     let mut expected_trace = tokio::fs::read_to_string(base_dir.join(trace_file))
         .await
         .map(|s| KdlDocument::parse(&s).expect("parse"))
@@ -260,17 +260,17 @@ pub async fn test_backtrace(depth: usize, is_64bit: bool, is_pie: bool, is_stati
         .scope(tracee_name, "func5", 0)
         .build();
 
-    let (tracee, _) = tracer
+    let (mut tracee, _) = tracer
         .spawn(nosco_tracer::Command::new(&tracee_path))
         .await
         .expect("spawn");
 
-    let (exit_code, trace_handler) = tracee.resume_and_trace().await.expect("run");
+    let exit_code = tracee.resume_and_trace().await.expect("run");
     assert_eq!(exit_code, 0);
 
     let trace_file = "backtrace.kdl";
 
-    let mut generated_trace = trace_handler.into_kdl();
+    let mut generated_trace = tracee.into_inner().into_kdl();
     let mut expected_trace = tokio::fs::read_to_string(base_dir.join(trace_file))
         .await
         .map(|s| KdlDocument::parse(&s).expect("parse"))

@@ -106,7 +106,7 @@ where
     ///
     /// On success, the tracee's exit code is returned as well as the event handler.
     #[tracing::instrument(name = "Trace", skip_all, fields(mode = self.state.label()))]
-    pub async fn run(mut self) -> crate::Result<(i32, H), S::Error, H::Error> {
+    pub async fn run(&mut self) -> crate::Result<i32, S::Error, H::Error> {
         // previously executed CPU instruction by threads (ID)
         let mut prev_instrs = HashMap::<u64, (u64, Opcodes)>::new();
 
@@ -151,7 +151,7 @@ where
                 DebugEvent::Exited { exit_code } => {
                     tracing::info!(exit_code, "tracee has exited");
 
-                    break Ok((exit_code, self.handler));
+                    break Ok(exit_code);
                 }
             }
         }
