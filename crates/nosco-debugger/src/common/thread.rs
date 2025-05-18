@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::breakpoint::Breakpoint;
+use crate::sys::Exception;
 
 pub struct ThreadManager {
     threads: HashMap<u64, ThreadState>,
@@ -59,19 +60,22 @@ impl ThreadManager {
     }
 
     pub fn register_thread_stop(
-        &mut self,
+        &self,
         thread_id: u64,
-        stopped_by: Option<Breakpoint>,
+        stopped_by: Option<ThreadStopReason>,
     ) -> Option<StoppedThread> {
         self.threads.get(&thread_id).map(|state| StoppedThread {
             id: thread_id,
             instr_addr: 0,
             single_step: state.single_step,
             stepped_over: state.stepping_over.clone(),
-            stopped_by: stopped_by.map(|bk| {
-                let is_breakpoint_of_thread =
-                    self.breakpoints.contains(&bk.addr) || state.breakpoints.contains(&bk.addr);
-                (is_breakpoint_of_thread, bk)
+            stopped_by: stopped_by.map(|reason| match reason {
+                ThreadStopReason::Breakpoint(bk, _) => {
+                    let is_breakpoint_of_thread =
+                        self.breakpoints.contains(&bk.addr) || state.breakpoints.contains(&bk.addr);
+                    ThreadStopReason::Breakpoint(bk, is_breakpoint_of_thread)
+                }
+                reason => reason,
             }),
         })
     }
@@ -87,6 +91,14 @@ impl ThreadManager {
             state.stepping_over = stepping_over;
         }
     }
+}
+
+pub enum ThreadStopReason {
+    Breakpoint(
+        Breakpoint,
+        bool, /* whether the breakpoint is in effect for the thread */
+    ),
+    Exception(Exception),
 }
 
 struct ThreadState {
@@ -117,11 +129,8 @@ pub struct StoppedThread {
     /// enabled again.
     pub(super) stepped_over: Option<Breakpoint>,
 
-    /// The optional breakpoint that stopped the thread.
-    ///
-    /// The boolean specifies whether the breakpoint is in effect for this
-    /// thread.
-    pub(super) stopped_by: Option<(bool, Breakpoint)>,
+    /// The optional action that stopped the thread.
+    pub(super) stopped_by: Option<ThreadStopReason>,
 }
 
 impl nosco_tracer::debugger::Thread for StoppedThread {

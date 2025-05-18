@@ -6,6 +6,7 @@ use miette::IntoDiagnostic;
 use nosco_debugger::Debugger;
 use nosco_storage::MlaStorageWriter;
 use nosco_tracer::Command;
+use nosco_tracer::debugger::ExitStatus;
 use nosco_tracer::tracer::Tracer;
 use tokio::process::{ChildStderr, ChildStdout};
 
@@ -73,7 +74,12 @@ pub fn evaluate_run(
         let mut stdin = stdio.stdin;
         std::thread::spawn(move || std::io::copy(&mut std::io::stdin(), &mut stdin));
 
-        let exit_code = process.resume_and_trace().await.into_diagnostic()?;
+        let res = tokio::select! {
+            res = process.resume_and_trace() => res.into_diagnostic(),
+            res = tokio::signal::ctrl_c() => {
+                res.into_diagnostic().map(|_| ExitStatus::ExitCode(1))
+            }
+        };
 
         let _ = stdout.await;
         let _ = stderr.await;
@@ -84,7 +90,12 @@ pub fn evaluate_run(
             .await
             .into_diagnostic()?;
 
-        Ok(exit_code)
+        res.and_then(|status| match status {
+            ExitStatus::ExitCode(exit_code) => Ok(exit_code),
+            ExitStatus::Exception(exception) => {
+                Err(miette::miette!("Traced process exited by {}", exception.0))
+            }
+        })
     })
 }
 

@@ -12,13 +12,14 @@ use nix::sys::ptrace;
 use nix::sys::signal::Signal;
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::Pid;
+use nosco_tracer::debugger::ExitStatus;
 use wholesym::{SymbolManager, SymbolManagerConfig};
 
 pub use self::rdebug::LinkMap;
 use self::rdebug::RDebug;
 use super::binary::MappedBinary;
-use super::mem;
 use super::process::TracedProcessHandle;
+use super::{Exception, mem};
 use crate::common::DebugStop;
 use crate::common::session::SessionCx;
 
@@ -178,8 +179,9 @@ impl Session {
         let status = waitpid(self.debuggee_handle.id(), None)?;
 
         let stop = match status {
-            WaitStatus::Stopped(pid, Signal::SIGTRAP) => DebugStop::Trap {
+            WaitStatus::Stopped(pid, signal) => DebugStop::Exception {
                 thread_id: pid.as_raw() as u64,
+                exception: Exception(signal),
             },
             WaitStatus::PtraceEvent(_pid, Signal::SIGTRAP, PTRACE_EVENT_CLONE) => {
                 // check if new thread (read regs args for specific flag)
@@ -194,7 +196,10 @@ impl Session {
                     exit_code,
                 }
             }
-            WaitStatus::Exited(_, exit_code) => DebugStop::Exited { exit_code },
+            WaitStatus::Exited(_, exit_code) => DebugStop::Exited(ExitStatus::ExitCode(exit_code)),
+            WaitStatus::Signaled(_, signal, _) => {
+                DebugStop::Exited(ExitStatus::Exception(Exception(signal)))
+            }
             _ => return Err(crate::sys::Error::BadChildWait(status)),
         };
 

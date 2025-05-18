@@ -8,7 +8,7 @@ use wholesym::samply_symbols::pdb::FallibleIterator;
 
 use super::DebugStop;
 use super::breakpoint::BreakpointManager;
-use super::thread::ThreadManager;
+use super::thread::{ThreadManager, ThreadStopReason};
 use crate::sys;
 use crate::sys::process::TracedProcessHandle;
 
@@ -93,12 +93,29 @@ impl Session {
         })
     }
 
-    /// Handles the case where a thread was stopped by some trap.
+    /// Handles the case where a thread was stopped by some exception.
     ///
     /// # Note
     ///
     /// This function may push new debug events in the event queue.
-    async fn handle_trap(&mut self, thread_id: u64) -> crate::Result<()> {
+    async fn handle_exception(
+        &mut self,
+        thread_id: u64,
+        exception: sys::Exception,
+    ) -> crate::Result<()> {
+        if !exception.is_breakpoint_or_singlestep() {
+            let Some(thread) = self
+                .thread_manager
+                .register_thread_stop(thread_id, Some(ThreadStopReason::Exception(exception)))
+            else {
+                // TODO: error, return unknown trapped thread
+                unreachable!("unknown trapped thread: {thread_id}");
+            };
+
+            self.resume(thread)?;
+            return Ok(());
+        }
+
         //
         // handle (potential) hardware watchpoint
         //
@@ -130,17 +147,17 @@ impl Session {
             .and_then(|bk| bk.enabled().then_some(bk));
 
         // update and get the thread state of the stopped thread
-        let Some(mut thread) = self
-            .thread_manager
-            .register_thread_stop(thread_id, breakpoint)
-        else {
+        let Some(mut thread) = self.thread_manager.register_thread_stop(
+            thread_id,
+            breakpoint.map(|bk| ThreadStopReason::Breakpoint(bk, false /* irrelevant */)),
+        ) else {
             // TODO: error, return unknown trapped thread
             unreachable!("unknown trapped thread: {thread_id}");
         };
 
         match thread.stopped_by.as_ref() {
             // the thread has triggered a breakpoint
-            Some((is_breakpoint_of_thread, breakpoint)) => {
+            Some(ThreadStopReason::Breakpoint(breakpoint, is_breakpoint_of_thread)) => {
                 // rewind the instruction pointer
                 regs.set_instr_addr(breakpoint.addr);
                 regs.assign_to_thread(self, &thread)?;
@@ -180,7 +197,11 @@ impl Session {
                 self.debug_events.push_back(DebugEvent::Singlestep(thread));
             }
             None => {
-                unreachable!("unknown trap reason at {trap_addr:#x}");
+                thread.stopped_by = Some(ThreadStopReason::Exception(exception));
+                self.resume(thread)?;
+            }
+            Some(ThreadStopReason::Exception(_)) => {
+                self.resume(thread)?;
             }
         }
 
@@ -221,6 +242,8 @@ impl DebugSession for Session {
     type MappedBinary = sys::MappedBinary;
     type StoppedThread = super::thread::StoppedThread;
 
+    type Exception = sys::Exception;
+
     type Error = crate::Error;
 
     #[tracing::instrument(name = "DebugEventLoop", skip_all)]
@@ -231,8 +254,11 @@ impl DebugSession for Session {
             }
 
             match self.inner.wait_for_debug_stop().await? {
-                DebugStop::Trap { thread_id } => {
-                    self.handle_trap(thread_id).await?;
+                DebugStop::Exception {
+                    thread_id,
+                    exception,
+                } => {
+                    self.handle_exception(thread_id, exception).await?;
                 }
                 DebugStop::ThreadCreated { thread_id } => {
                     let regs = get_thread_registers(thread_id)?;
@@ -264,9 +290,8 @@ impl DebugSession for Session {
                         change: DebugStateChange::ThreadExited { exit_code },
                     });
                 }
-                DebugStop::Exited { exit_code } => {
-                    self.debug_events
-                        .push_back(DebugEvent::Exited { exit_code });
+                DebugStop::Exited(status) => {
+                    self.debug_events.push_back(DebugEvent::Exited(status));
                 }
             }
         }
@@ -387,18 +412,23 @@ impl DebugSession for Session {
             breakpoint.enable()?;
         }
 
-        if let Some((_, breakpoint)) = thread.stopped_by.as_ref() {
+        if let Some(ThreadStopReason::Breakpoint(breakpoint, _)) = thread.stopped_by.as_ref() {
             breakpoint.disable()?;
             resume_by_single_step = true;
         }
 
-        sys::thread::resume_thread(thread.id(), resume_by_single_step)?;
+        let thread_id = thread.id();
 
-        self.thread_manager.register_thread_resume(
-            thread.id(),
-            thread.single_step,
-            thread.stopped_by.map(|(_, bk)| bk),
-        );
+        let (stepping_over, exception) = match thread.stopped_by {
+            Some(ThreadStopReason::Breakpoint(breakpoint, _)) => (Some(breakpoint), None),
+            Some(ThreadStopReason::Exception(exception)) => (None, Some(exception)),
+            None => (None, None),
+        };
+
+        sys::thread::resume_thread(thread_id, resume_by_single_step, exception)?;
+
+        self.thread_manager
+            .register_thread_resume(thread_id, thread.single_step, stepping_over);
 
         Ok(())
     }

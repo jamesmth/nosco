@@ -9,6 +9,7 @@ use nix::unistd::Pid;
 use nosco_tracer::debugger::{DebugSession, Thread};
 use nosco_tracer::debugger::{RegistersAarch64, RegistersArm, RegistersX86, RegistersX86_64};
 
+use super::Exception;
 use crate::Session;
 
 #[cfg(target_arch = "x86_64")]
@@ -16,11 +17,21 @@ type StackUnwinderRegisters = framehop::x86_64::UnwindRegsX86_64;
 #[cfg(target_arch = "aarch64")]
 type StackUnwinderRegisters = framehop::aarch64::UnwindRegsAarch64;
 
-pub fn resume_thread(thread_id: u64, single_step: bool) -> crate::sys::Result<()> {
+pub fn resume_thread(
+    thread_id: u64,
+    single_step: bool,
+    exception: Option<Exception>,
+) -> crate::sys::Result<()> {
     if single_step {
-        ptrace::step(Pid::from_raw(thread_id as i32), None)?;
+        ptrace::step(
+            Pid::from_raw(thread_id as i32),
+            exception.map(|Exception(signal)| signal),
+        )?;
     } else {
-        ptrace::cont(Pid::from_raw(thread_id as i32), None)?;
+        ptrace::cont(
+            Pid::from_raw(thread_id as i32),
+            exception.map(|Exception(signal)| signal),
+        )?;
     }
 
     Ok(())

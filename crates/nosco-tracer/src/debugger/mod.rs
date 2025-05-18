@@ -49,6 +49,9 @@ pub trait DebugSession {
     /// architecture.
     type RegisterStateAarch64: RegistersAarch64<Self>;
 
+    /// Type of exception returned by the debuggee.
+    type Exception;
+
     /// Error returned by this trait.
     type Error: std::error::Error;
 
@@ -141,10 +144,16 @@ pub enum DebugEvent<S: DebugSession + ?Sized> {
     },
 
     /// The debuggee has exited.
-    Exited {
-        /// Exit code of the debuggee.
-        exit_code: i32,
-    },
+    Exited(ExitStatus<S::Exception>),
+}
+
+/// Exit status of the debuggee.
+pub enum ExitStatus<E> {
+    /// The debuggee has stopped with an exit code.
+    ExitCode(i32),
+
+    /// The debuggee has stopped because of an exception.
+    Exception(E),
 }
 
 /// State change that occurred within the debuggee.

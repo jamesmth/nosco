@@ -1,7 +1,7 @@
 use std::process::{ChildStderr, ChildStdin, ChildStdout};
 
 use super::TraceTask;
-use crate::debugger::DebugSession;
+use crate::debugger::{DebugSession, ExitStatus};
 use crate::handler::EventHandler;
 
 /// Suspended process ready to be resumed and traced.
@@ -30,7 +30,9 @@ where
     /// specified when [building the tracer](super::Builder).
     ///
     /// On success, the exit code of the process is returned, as well as the event handler.
-    pub async fn resume_and_trace(&mut self) -> crate::Result<i32, S::Error, H::Error> {
+    pub async fn resume_and_trace(
+        &mut self,
+    ) -> crate::Result<ExitStatus<S::Exception>, S::Error, H::Error> {
         if self.resumed {
             Err(crate::Error::TraceeAlreadyResumed)
         } else {

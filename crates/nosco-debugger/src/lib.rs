@@ -39,3 +39,4 @@ mod sys;
 pub use self::common::debugger::Debugger;
 pub use self::common::session::Session;
 pub use self::error::{Error, Result};
+pub use self::sys::Exception;

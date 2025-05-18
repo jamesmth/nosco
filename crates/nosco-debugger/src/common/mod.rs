@@ -3,9 +3,12 @@ pub mod debugger;
 pub mod session;
 pub mod thread;
 
+use nosco_tracer::debugger::ExitStatus;
+
 pub enum DebugStop {
-    Trap {
+    Exception {
         thread_id: u64,
+        exception: crate::sys::Exception,
     },
 
     #[allow(dead_code)] // to be used when multithreading is supported
@@ -18,7 +21,5 @@ pub enum DebugStop {
         exit_code: i32,
     },
 
-    Exited {
-        exit_code: i32,
-    },
+    Exited(ExitStatus<crate::sys::Exception>),
 }

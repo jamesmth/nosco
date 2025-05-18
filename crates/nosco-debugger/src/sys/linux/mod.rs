@@ -11,6 +11,7 @@ use std::os::unix::ffi::OsStringExt;
 
 use nix::fcntl::OFlag;
 use nix::sys::ptrace;
+use nix::sys::signal::Signal;
 use nix::unistd::{ForkResult, chdir, dup2, execvp, fork, pipe2};
 use nosco_tracer::Command;
 use nosco_tracer::tracer::TracedProcessStdio;
@@ -107,6 +108,15 @@ pub async fn spawn_debuggee(
     };
 
     Ok((handle, stdio))
+}
+
+/// Exception happening within the debuggee.
+pub struct Exception(pub Signal);
+
+impl Exception {
+    pub(crate) fn is_breakpoint_or_singlestep(&self) -> bool {
+        matches!(self.0, Signal::SIGTRAP)
+    }
 }
 
 mod imp {

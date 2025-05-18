@@ -15,7 +15,7 @@ use self::state::{FullTraceState, ScopedTraceConfig, ScopedTraceState};
 pub use self::tracee::{TracedProcess, TracedProcessStdio};
 use crate::Command;
 use crate::debugger::{BinaryInformation, DebugEvent, DebugStateChange, Debugger, ThreadRegisters};
-use crate::debugger::{DebugSession, Thread};
+use crate::debugger::{DebugSession, ExitStatus, Thread};
 use crate::debugger::{RegistersAarch64, RegistersArm, RegistersX86, RegistersX86_64};
 use crate::error::{DebuggerError, HandlerError};
 use crate::handler::EventHandler;
@@ -106,7 +106,7 @@ where
     ///
     /// On success, the tracee's exit code is returned as well as the event handler.
     #[tracing::instrument(name = "Trace", skip_all, fields(mode = self.state.label()))]
-    pub async fn run(&mut self) -> crate::Result<i32, S::Error, H::Error> {
+    pub async fn run(&mut self) -> crate::Result<ExitStatus<S::Exception>, S::Error, H::Error> {
         // previously executed CPU instruction by threads (ID)
         let mut prev_instrs = HashMap::<u64, (u64, Opcodes)>::new();
 
@@ -148,10 +148,10 @@ where
                         .instrument(tracing::info_span!("StateChange", tid = thread_id))
                         .await?;
                 }
-                DebugEvent::Exited { exit_code } => {
-                    tracing::info!(exit_code, "tracee has exited");
+                DebugEvent::Exited(status) => {
+                    tracing::info!("tracee has exited");
 
-                    break Ok(exit_code);
+                    break Ok(status);
                 }
             }
         }
