@@ -81,11 +81,12 @@ pub fn evaluate_run(
             }
         };
 
+        let trace_event_handler = process.into_inner();
+
         let _ = stdout.await;
         let _ = stderr.await;
 
-        process
-            .into_inner()
+        trace_event_handler
             .finalize_storage()
             .await
             .into_diagnostic()?;

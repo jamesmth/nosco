@@ -46,7 +46,7 @@ where
     /// # Warning
     ///
     /// This function consumes the `TracedProcess`, which means that the traced process
-    /// is killed if [resume_and_trace](Self::resume_and_trace) was never called.
+    /// is killed if not run to completion.
     pub fn into_inner(self) -> H {
         self.trace_task.handler
     }
