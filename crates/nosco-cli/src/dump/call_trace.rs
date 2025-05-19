@@ -63,7 +63,8 @@ pub fn dump_to_kdl(
         let call_id = entry.key().clone();
         let CallTraceInformation { call_data_info, .. } = entry.into_mut();
 
-        for call_data in reader.call_stream_reader(call_id).into_diagnostic()? {
+        let (_, call_data_iter) = reader.call_stream_reader(call_id).into_diagnostic()?;
+        for call_data in call_data_iter {
             match call_data.into_diagnostic()? {
                 CallData::ExecutedInstruction {
                     opcodes_addr,

@@ -121,26 +121,14 @@ impl CallInformationFetcher {
         call_id: String,
         reader: &mut MlaStorageReader<'_, impl Read + Seek>,
     ) -> miette::Result<CallInformation> {
-        let address = if self.fetch_address {
-            call_id
-                .split('_')
-                .nth(1)
-                .and_then(|addr| addr.parse().ok())
-                .map(Some)
-                .ok_or_else(|| miette::miette!("invalid call ID: {call_id}"))?
+        let (thread_id, address) = if self.fetch_thread_id || self.fetch_address {
+            let (metadata, _) = reader.call_stream_reader(&call_id).into_diagnostic()?;
+            (
+                self.fetch_thread_id.then_some(metadata.thread_id),
+                self.fetch_address.then_some(metadata.addr),
+            )
         } else {
-            None
-        };
-
-        let thread_id = if self.fetch_thread_id {
-            call_id
-                .split('_')
-                .next()
-                .and_then(|addr| addr.parse().ok())
-                .map(Some)
-                .ok_or_else(|| miette::miette!("invalid call ID: {call_id}"))?
-        } else {
-            None
+            (None, None)
         };
 
         let backtrace = if self.fetch_backtrace {

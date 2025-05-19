@@ -7,7 +7,20 @@ pub(super) const STATE_UPDATE_STREAM_LABEL: &str = "state_update";
 
 /// Metadata of a function call trace.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum CallMetadata {
+pub struct CallMetadata {
+    /// Thread ID of the function call.
+    pub thread_id: u64,
+
+    /// Address of the function call.
+    pub addr: u64,
+
+    /// Level information of the function call.
+    pub level: CallLevel,
+}
+
+/// Level information of a function call.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CallLevel {
     /// Metadata related to a root function call.
     Root {
         /// Backtrace of this call, containing the addresses of all parent

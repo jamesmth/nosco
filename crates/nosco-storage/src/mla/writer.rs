@@ -3,13 +3,12 @@ use std::io::{Cursor, Write};
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use mla::config::ArchiveWriterConfig;
 use mla::{ArchiveWriter, Layers};
 use serde::Serialize;
 
-use super::content::{CallData, CallMetadata, StateChangeData, StateInitData};
+use super::content::{CallData, CallLevel, CallMetadata, StateChangeData, StateInitData};
 use super::content::{STATE_INIT_STREAM_LABEL, STATE_UPDATE_STREAM_LABEL};
 use super::content::{StateUpdateData, StateUpdateDataHeader, StateUpdateOrigin};
 use crate::TraceSessionStorageWriter;
@@ -183,7 +182,8 @@ struct MlaStorageWriterCore<'a, W: Write + Send> {
     call_streams: HashMap<u64, Vec<CallStream>>,
     created_threads: HashMap<u64, CreatedThread>,
 
-    next_update_id: u64,
+    update_id_generator: IdSequence,
+    call_id_generator: IdSequence,
 }
 
 impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
@@ -201,7 +201,8 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
             state_update_stream_id: None,
             call_streams: HashMap::new(),
             created_threads: HashMap::new(),
-            next_update_id: 0,
+            update_id_generator: IdSequence::new(),
+            call_id_generator: IdSequence::new(),
         })
     }
 
@@ -285,14 +286,16 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
         call_addr: u64,
         backtrace: Option<Vec<u64>>,
     ) -> crate::Result<()> {
-        let (new_stream_id, new_stream_label) = self.create_call_stream(thread_id, call_addr)?;
+        let (new_stream_id, new_stream_label) = self.create_call_stream()?;
 
         let call_streams = self
             .call_streams
             .get_mut(&thread_id)
             .ok_or(crate::Error::UnexpectedThreadId(thread_id))?;
 
-        if let Some(CallStream { id, label, .. }) = call_streams.last() {
+        let level = if let Some(CallStream { id, label, .. }) = call_streams.last() {
+            // this is a nested call
+
             let stream_id = *id;
             let stream_label = label.clone();
 
@@ -309,12 +312,9 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
                 },
             )?;
 
-            self.write_to_stream(
-                new_stream_id,
-                CallMetadata::Sub {
-                    caller_id: stream_label,
-                },
-            )?;
+            CallLevel::Sub {
+                caller_id: stream_label,
+            }
         } else {
             // this is a root call
 
@@ -331,9 +331,19 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
                 latest_addr: call_addr,
             });
 
-            let backtrace = backtrace.unwrap_or_default();
-            self.write_to_stream(new_stream_id, CallMetadata::Root { backtrace })?;
-        }
+            CallLevel::Root {
+                backtrace: backtrace.unwrap_or_default(),
+            }
+        };
+
+        self.write_to_stream(
+            new_stream_id,
+            CallMetadata {
+                thread_id,
+                addr: call_addr,
+                level,
+            },
+        )?;
 
         Ok(())
     }
@@ -489,13 +499,8 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
         Ok(())
     }
 
-    fn create_call_stream(
-        &mut self,
-        thread_id: u64,
-        call_addr: u64,
-    ) -> crate::Result<(u64, String)> {
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-        let stream_label = format!("{thread_id}_{call_addr}_{timestamp}");
+    fn create_call_stream(&mut self) -> crate::Result<(u64, String)> {
+        let stream_label = format!("{}", self.call_id_generator.next_id());
 
         let stream_id = self.mla.start_file(&stream_label)?;
 
@@ -535,8 +540,7 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
         &mut self,
         thread_id: u64,
     ) -> crate::Result<StateUpdateDataHeader> {
-        let update_id = self.next_update_id;
-        self.next_update_id = self.next_update_id.wrapping_add(1);
+        let update_id = self.update_id_generator.next_id();
 
         let call_id = if let Some(call_stream) = self
             .call_streams
@@ -637,4 +641,20 @@ struct CreatedThread {
     state_update_header: Option<StateUpdateDataHeader>,
     id: u64,
     root_call_ids: Vec<String>,
+}
+
+struct IdSequence {
+    next_id: u64,
+}
+
+impl IdSequence {
+    const fn new() -> Self {
+        Self { next_id: 0 }
+    }
+
+    fn next_id(&mut self) -> u64 {
+        let id = self.next_id;
+        self.next_id = self.next_id.wrapping_add(1);
+        id
+    }
 }

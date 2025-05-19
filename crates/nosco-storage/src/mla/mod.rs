@@ -15,7 +15,7 @@ mod tests {
     use super::content::{StateChangeData, StateUpdateOrigin};
     use super::{MlaStorageReader, MlaStorageWriter};
     use crate::TraceSessionStorageWriter;
-    use crate::mla::content::CallData;
+    use crate::mla::content::{CallData, CallLevel, CallMetadata};
     use crate::mla::reader::BacktraceElement;
 
     #[test]
@@ -392,13 +392,19 @@ mod tests {
             panic!();
         };
 
-        let call_data = reader
-            .call_stream_reader(&root_call_ids[0])
-            .unwrap()
-            .collect::<crate::Result<Vec<_>>>()
-            .unwrap();
+        let (call_metadata, call_data) = reader.call_stream_reader(&root_call_ids[0]).unwrap();
+        let call_data = call_data.collect::<crate::Result<Vec<_>>>().unwrap();
 
         assert_eq!(call_data.len(), 1);
+
+        assert_eq!(
+            call_metadata,
+            CallMetadata {
+                thread_id: 1,
+                addr: 0x0,
+                level: CallLevel::Root { backtrace: vec![] }
+            }
+        );
 
         assert_eq!(
             call_data[0],
@@ -457,13 +463,21 @@ mod tests {
             ]
         );
 
-        let call_data = reader
-            .call_stream_reader(&root_call_ids[0])
-            .unwrap()
-            .collect::<crate::Result<Vec<_>>>()
-            .unwrap();
+        let (call_metadata, call_data) = reader.call_stream_reader(&root_call_ids[0]).unwrap();
+        let call_data = call_data.collect::<crate::Result<Vec<_>>>().unwrap();
 
         assert_eq!(call_data.len(), 1);
+
+        assert_eq!(
+            call_metadata,
+            CallMetadata {
+                thread_id: 1,
+                addr: 0x0,
+                level: CallLevel::Root {
+                    backtrace: vec![0x1, 0x2]
+                }
+            }
+        );
 
         assert_eq!(
             call_data[0],
@@ -512,13 +526,19 @@ mod tests {
 
         assert!(backtrace.is_empty());
 
-        let call_data = reader
-            .call_stream_reader(&root_call_ids[0])
-            .unwrap()
-            .collect::<crate::Result<Vec<_>>>()
-            .unwrap();
+        let (call_metadata, call_data) = reader.call_stream_reader(&root_call_ids[0]).unwrap();
+        let call_data = call_data.collect::<crate::Result<Vec<_>>>().unwrap();
 
         assert!(call_data.is_empty());
+
+        assert_eq!(
+            call_metadata,
+            CallMetadata {
+                thread_id: 1,
+                addr: 0x0,
+                level: CallLevel::Root { backtrace: vec![] }
+            }
+        );
 
         let backtrace = reader
             .backtrace_reader(&root_call_ids[1])
@@ -528,13 +548,19 @@ mod tests {
 
         assert!(backtrace.is_empty());
 
-        let call_data = reader
-            .call_stream_reader(&root_call_ids[1])
-            .unwrap()
-            .collect::<crate::Result<Vec<_>>>()
-            .unwrap();
+        let (call_metadata, call_data) = reader.call_stream_reader(&root_call_ids[1]).unwrap();
+        let call_data = call_data.collect::<crate::Result<Vec<_>>>().unwrap();
 
         assert!(call_data.is_empty());
+
+        assert_eq!(
+            call_metadata,
+            CallMetadata {
+                thread_id: 1,
+                addr: 0x1,
+                level: CallLevel::Root { backtrace: vec![] }
+            }
+        );
     }
 
     #[test]
@@ -580,14 +606,14 @@ mod tests {
 
         assert_eq!(backtrace, vec![BacktraceElement::CallAddr(0xa)]);
 
-        let child_call_id_1 = reader
-            .call_stream_reader(&root_call_ids[0])
-            .unwrap()
+        let (_, mut call_data) = reader.call_stream_reader(&root_call_ids[0]).unwrap();
+        let child_call_id_1 = call_data
             .find_map(|call_data| match call_data {
                 Ok(CallData::CalledFunction { call_id }) => Some(call_id),
                 _ => None,
             })
             .unwrap();
+        drop(call_data);
 
         let backtrace = reader
             .backtrace_reader(&child_call_id_1)
@@ -603,14 +629,14 @@ mod tests {
             ]
         );
 
-        let child_call_id_2 = reader
-            .call_stream_reader(&child_call_id_1)
-            .unwrap()
+        let (_, mut call_data) = reader.call_stream_reader(&child_call_id_1).unwrap();
+        let child_call_id_2 = call_data
             .find_map(|call_data| match call_data {
                 Ok(CallData::CalledFunction { call_id }) => Some(call_id),
                 _ => None,
             })
             .unwrap();
+        drop(call_data);
 
         let backtrace = reader
             .backtrace_reader(child_call_id_2)

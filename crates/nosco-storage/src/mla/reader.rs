@@ -8,7 +8,7 @@ use mla::layers::traits::LayerReader;
 use mla::{ArchiveFile, ArchiveReader, BlocksToFileReader};
 use serde::de::DeserializeOwned;
 
-use super::content::{CallData, CallMetadata, StateChangeData, StateInitData};
+use super::content::{CallData, CallLevel, CallMetadata, StateChangeData, StateInitData};
 use super::content::{STATE_INIT_STREAM_LABEL, STATE_UPDATE_STREAM_LABEL};
 use super::content::{StateUpdateData, StateUpdateOrigin};
 
@@ -80,9 +80,11 @@ impl<'rd, R: 'rd + Read + Seek> MlaStorageReader<'rd, R> {
     pub fn call_stream_reader<S: Into<String>>(
         &mut self,
         call_id: S,
-    ) -> crate::Result<impl Iterator<Item = crate::Result<CallData>> + use<'_, 'rd, R, S>> {
-        let (_, stream) = self.read_call_stream(call_id)?.read_metadata()?;
-        Ok(stream)
+    ) -> crate::Result<(
+        CallMetadata,
+        impl Iterator<Item = crate::Result<CallData>> + use<'_, 'rd, R, S>,
+    )> {
+        self.read_call_stream(call_id)?.read_metadata()
     }
 
     fn read_call_stream<'a>(
@@ -193,9 +195,9 @@ impl<R: Read + Seek> BacktraceReader<'_, '_, R> {
                 }
             };
 
-            let next_call_id = match next_call_metadata {
-                CallMetadata::Sub { caller_id } => caller_id,
-                CallMetadata::Root { backtrace } => {
+            let next_call_id = match next_call_metadata.level {
+                CallLevel::Sub { caller_id } => caller_id,
+                CallLevel::Root { backtrace } => {
                     self.next_element = Either::Right(backtrace.into_iter());
                     continue;
                 }
