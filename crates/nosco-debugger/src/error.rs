@@ -5,6 +5,10 @@ pub enum Error {
     #[error(transparent)]
     Wholesym(#[from] wholesym::Error),
 
+    /// An untracked thread was discovered.
+    #[error("Untracked thread {0}")]
+    UntrackedThread(u64),
+
     /// Internal debugger error.
     #[error(transparent)]
     DebuggerInternal(#[from] crate::sys::Error),

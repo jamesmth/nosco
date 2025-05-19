@@ -104,23 +104,19 @@ impl Session {
         exception: sys::Exception,
     ) -> crate::Result<()> {
         if !exception.is_breakpoint_or_singlestep() {
-            let Some(thread) = self
+            let thread = self
                 .thread_manager
                 .register_thread_stop(thread_id, Some(ThreadStopReason::Exception(exception)))
-            else {
-                // TODO: error, return unknown trapped thread
-                unreachable!("unknown trapped thread: {thread_id}");
-            };
+                .ok_or(crate::Error::UntrackedThread(thread_id))?;
 
-            self.resume(thread)?;
-            return Ok(());
+            return self.resume(thread);
         }
 
         //
         // handle (potential) hardware watchpoint
         //
 
-        let is_hardware_watchpoint = self.inner.handle_internal_watchpoint(
+        let handled_hardware_watchpoint = self.inner.handle_internal_watchpoint(
             thread_id,
             SessionCx {
                 breakpoint_manager: &mut self.breakpoint_manager,
@@ -130,12 +126,13 @@ impl Session {
             },
         )?;
 
-        if is_hardware_watchpoint {
-            let Some(thread) = self.thread_manager.register_thread_stop(thread_id, None) else {
-                unreachable!("unknown trapped thread: {thread_id}");
-            };
-            self.resume(thread)?;
-            return Ok(());
+        if handled_hardware_watchpoint {
+            let thread = self
+                .thread_manager
+                .register_thread_stop(thread_id, None)
+                .ok_or(crate::Error::UntrackedThread(thread_id))?;
+
+            return self.resume(thread);
         }
 
         // retrieve the associated breakpoint (if enabled)
@@ -147,13 +144,13 @@ impl Session {
             .and_then(|bk| bk.enabled().then_some(bk));
 
         // update and get the thread state of the stopped thread
-        let Some(mut thread) = self.thread_manager.register_thread_stop(
-            thread_id,
-            breakpoint.map(|bk| ThreadStopReason::Breakpoint(bk, false /* irrelevant */)),
-        ) else {
-            // TODO: error, return unknown trapped thread
-            unreachable!("unknown trapped thread: {thread_id}");
-        };
+        let mut thread = self
+            .thread_manager
+            .register_thread_stop(
+                thread_id,
+                breakpoint.map(|bk| ThreadStopReason::Breakpoint(bk, false /* irrelevant */)),
+            )
+            .ok_or(crate::Error::UntrackedThread(thread_id))?;
 
         match thread.stopped_by.as_ref() {
             // the thread has triggered a breakpoint
@@ -275,11 +272,10 @@ impl DebugSession for Session {
                     thread_id,
                     exit_code,
                 } => {
-                    let Some(thread) = self.thread_manager.register_thread_stop(thread_id, None)
-                    else {
-                        // TODO: error, return unknown trapped thread
-                        unreachable!("unknown trapped thread: {thread_id}");
-                    };
+                    let thread = self
+                        .thread_manager
+                        .register_thread_stop(thread_id, None)
+                        .ok_or(crate::Error::UntrackedThread(thread_id))?;
 
                     self.resume(thread)?;
 
