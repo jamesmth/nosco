@@ -327,7 +327,7 @@ impl DebugSession for Session {
         addr: u64,
     ) -> Result<(), Self::Error> {
         self.breakpoint_manager
-            .remove_breakpoint_or_decrement_usage(addr)?;
+            .remove_breakpoint_or_decrement_usage(addr);
 
         self.thread_manager
             .register_remove_breakpoint(thread.into().map(|th| th.id()), addr);

@@ -71,10 +71,10 @@ impl BreakpointManager {
         Ok(bk)
     }
 
-    pub fn remove_breakpoint_or_decrement_usage(&mut self, addr: u64) -> sys::Result<()> {
+    pub fn remove_breakpoint_or_decrement_usage(&mut self, addr: u64) {
         let mut bk = match self.bks.entry(addr) {
             Entry::Occupied(e) => e,
-            Entry::Vacant(_) => return Ok(()),
+            Entry::Vacant(_) => return,
         };
 
         bk.get_mut().ref_count = bk.get().ref_count.saturating_sub(1);
@@ -82,10 +82,11 @@ impl BreakpointManager {
         if bk.get().ref_count == 0 {
             let (addr, bk) = bk.remove_entry();
             bk.deleted.swap(true, Ordering::Acquire);
-            sys::mem::write_process_memory(self.debuggee_process_id, addr, &bk.orig_opcodes)?;
-        }
 
-        Ok(())
+            // ignore the error, because the memory region might be unmapped
+            let _ =
+                sys::mem::write_process_memory(self.debuggee_process_id, addr, &bk.orig_opcodes);
+        }
     }
 }
 

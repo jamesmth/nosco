@@ -64,15 +64,12 @@ impl ScopedTraceState {
             let span = tracing::info_span!("ResolveSymbol", binary = binary.file_name(), symbol);
             let _guard = span.enter();
 
-            let Some(addr) = binary_view
+            let addr = binary_view
                 .addr_of_symbol(symbol)
                 .map_err(|e| DebuggerError(e.into().into()))?
-            else {
-                return Err(crate::Error::SymbolNotFound(
-                    binary.file_name().to_owned(),
-                    symbol.clone(),
-                ));
-            };
+                .ok_or_else(|| {
+                    crate::Error::SymbolNotFound(binary.file_name().to_owned(), symbol.clone())
+                })?;
 
             tracing::info!(addr = format_args!("{addr:#x}"), "resolved");
 
@@ -89,16 +86,23 @@ impl ScopedTraceState {
     }
 
     /// Updates the state with the given binary unmapped by the tracee.
-    pub fn register_unmapped_binary(&mut self, binary_addr: BinaryAddr) {
+    pub fn register_unmapped_binary<S: DebugSession, H: EventHandler>(
+        &mut self,
+        session: &mut S,
+        binary_addr: BinaryAddr,
+    ) -> crate::Result<(), S::Error, H::Error> {
         let Some(addrs) = self.traced_functions.remove(&binary_addr) else {
-            return;
+            return Ok(());
         };
 
-        addrs.into_iter().for_each(|addr| {
+        for addr in addrs {
             self.traced_functions_depth.remove(&addr);
-        });
+            session
+                .remove_breakpoint(None, addr)
+                .map_err(DebuggerError)?;
+        }
 
-        // TODO remove breakpoints here?? (unmapped code, so PAGEFAULT if attempt to remove breakpoint)
+        Ok(())
     }
 
     /// Updates the state with the given thread created by the tracee.

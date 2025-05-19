@@ -346,7 +346,7 @@ where
                 }
 
                 if let TraceState::Scoped { ref mut state, .. } = self.state {
-                    state.register_unmapped_binary(addr);
+                    state.register_unmapped_binary::<S, H>(&mut self.session, addr)?;
                 }
 
                 Ok(())

@@ -71,21 +71,28 @@ pub fn write_process_memory(process_id: u64, addr: u64, buf: &[u8]) -> crate::sy
         let Ok(data) = chunk.try_into().map(i64::from_le_bytes) else {
             unreachable!("chunk should be 64 bytes long");
         };
-        ptrace::write(pid, write_addr as *mut _, data)?;
+
+        ptrace::write(pid, write_addr as *mut _, data)
+            .inspect_err(|e| tracing::error!(error = %e, addr = format_args!("{write_addr:#x}"), "ptrace(PTRACE_POKE_DATA)"))?;
+
         write_addr += chunk.len() as u64;
     }
 
     let remainder = data_to_write.remainder();
 
     if !remainder.is_empty() {
-        let mut old_data = ptrace::read(pid, write_addr as *mut _)?.to_le_bytes();
+        let mut old_data = ptrace::read(pid, write_addr as *mut _)
+            .inspect_err(|e| tracing::error!(error = %e, addr = format_args!("{write_addr:#x}"), "ptrace(PTRACE_PEEK_DATA)"))?
+            .to_le_bytes();
 
         for (old, new) in old_data.iter_mut().zip(remainder) {
             *old = *new;
         }
 
         let new_data = i64::from_le_bytes(old_data);
-        ptrace::write(pid, write_addr as *mut _, new_data)?;
+
+        ptrace::write(pid, write_addr as *mut _, new_data)
+            .inspect_err(|e| tracing::error!(error = %e, addr = format_args!("{write_addr:#x}"), "ptrace(PTRACE_POKE_DATA)"))?;
     }
 
     Ok(())
