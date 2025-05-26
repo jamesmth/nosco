@@ -1,1 +1,1 @@
-crates/nosco-tracer/README.md
+crates/nosco-cli/README.md
