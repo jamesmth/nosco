@@ -21,18 +21,6 @@
 Whether you are a reverse engineer, or just curious about how software runs on your OS, `nosco`
 is a tool that allows you to easily capture and analyze an execution trace of a process. 
 
-There are already a few mature tools out there that can do the same thing and more (think
-debuggers, profilers, fuzzers), so why another one?  In a few words, `nosco` is:
-- Straightforward to install (single binary, no external dependencies)
-- Easy to use, easy to configure
-- Developer-friendly (e.g, adding a tracing backend is a matter of implementing a few Rust traits)
-- **Not** a debugger/profiler/fuzzer, just a control flow tracer
-
-In the future, `nosco` aims to be:
-- Multi-platform for tracing local processes (only Linux right now)
-- Extensible at runtime via WASM-based plugins (e.g., customize the tracing behavior, interact with
-the traced process)
-
 ## Getting started
 
 ![Tutorial](https://github.com/user-attachments/assets/d864ceb6-dd6a-4a44-a3d9-fc0d800dd923)
@@ -71,6 +59,20 @@ If you have a [Rust](https://rustup.rs/) toolchain installed, you can install a 
 ```sh
 cargo install --git https://github.com/jamesmth/nosco --locked
 ```
+
+## Why use it?
+
+There are already a few mature tools out there that can do the same thing and more (think
+debuggers, profilers, fuzzers), so why another one?  In a few words, `nosco` is:
+- Straightforward to install (single binary, no external dependencies)
+- Easy to use, easy to configure
+- **Not** a debugger/profiler/fuzzer, just a control flow tracer
+- Developer-friendly (e.g, adding a tracing backend is a matter of implementing a few Rust traits)
+
+In the future, `nosco` aims to be:
+- Multi-platform for tracing local processes (only Linux right now)
+- Extensible at runtime via WASM-based plugins (e.g., customize the tracing behavior, interact with
+the traced process)
 
 ## Roadmap
 
