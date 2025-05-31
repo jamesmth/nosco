@@ -51,9 +51,9 @@ fn evaluate_dump(
     let storage = File::open(input).into_diagnostic()?;
 
     if let Some(output) = output {
-        let file = File::create(output).into_diagnostic()?;
-        nosco_cli::evaluate_dump(storage, file, dump_action)
+        let mut file = File::create(output).into_diagnostic()?;
+        nosco_cli::evaluate_dump(storage, &mut file, dump_action)
     } else {
-        nosco_cli::evaluate_dump(storage, std::io::stdout(), dump_action)
+        nosco_cli::evaluate_dump(storage, &mut std::io::stdout(), dump_action)
     }
 }

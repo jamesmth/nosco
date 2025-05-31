@@ -14,7 +14,7 @@ use super::cli::CliDumpAction;
 /// Runs the subcommand for dumping trace session information.
 pub fn evaluate_dump(
     input: impl Read + Seek,
-    mut output: impl Write,
+    output: &mut dyn Write,
     dump_action: CliDumpAction,
 ) -> miette::Result<()> {
     let reader = MlaStorageReader::from_reader(input).into_diagnostic()?;
