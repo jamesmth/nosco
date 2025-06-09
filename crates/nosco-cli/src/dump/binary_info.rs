@@ -90,15 +90,37 @@ fn fetch_partial_binaries_info(
         );
     }
 
-    for (update_origin, unload_addr) in unloaded_binaries {
-        let Some(binary_info) = binaries_info
-            .iter_mut()
-            .find(|info| info.load_addr == unload_addr)
-        else {
-            continue;
-        };
+    for (unload_update_origin, unload_addr) in unloaded_binaries {
+        let mut unloaded_binary_info = None;
 
-        binary_info.unloaded = Some(update_origin);
+        for info in binaries_info
+            .iter_mut()
+            .filter(|info| info.load_addr == unload_addr)
+        {
+            let timestamp_diff = info.loaded.as_ref().and_then(|load_update_origin| {
+                unload_update_origin
+                    .timestamp
+                    .duration_since(load_update_origin.timestamp)
+                    .ok()
+            });
+
+            let Some((unloaded_binary_info, prev_timestamp_diff)) = unloaded_binary_info.as_mut()
+            else {
+                unloaded_binary_info = Some((info, timestamp_diff));
+                continue;
+            };
+
+            if timestamp_diff.is_some_and(|new_dur| {
+                prev_timestamp_diff.is_none_or(|prev_dur| new_dur < prev_dur)
+            }) {
+                *unloaded_binary_info = info;
+                *prev_timestamp_diff = timestamp_diff;
+            }
+        }
+
+        if let Some((binary_info, _)) = unloaded_binary_info {
+            binary_info.unloaded = Some(unload_update_origin);
+        }
     }
 
     Ok(binaries_info)
