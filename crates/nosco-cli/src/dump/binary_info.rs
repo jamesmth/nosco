@@ -183,7 +183,7 @@ impl BinaryInformation {
 
         if let Some((thread_id, ref call_info)) = self.loaded {
             kdl_node.ensure_children().nodes_mut().push({
-                let mut node = KdlNode::new("loaded");
+                let mut node = KdlNode::new("loaded_by");
 
                 if let Some(call_info) = call_info {
                     node = call_info.dump_to_kdl_node(Some(node));
@@ -198,7 +198,7 @@ impl BinaryInformation {
 
         if let Some((thread_id, ref call_info)) = self.unloaded {
             kdl_node.ensure_children().nodes_mut().push({
-                let mut node = KdlNode::new("unloaded");
+                let mut node = KdlNode::new("unloaded_by");
 
                 if let Some(call_info) = call_info {
                     node = call_info.dump_to_kdl_node(Some(node));
