@@ -80,23 +80,23 @@ Here is an overview of the direction this project is heading.
 
 ### Major features
   
-| Feature                                                      | Release   | Dev |
-|--------------------------------------------------------------|-----------|-----|
-| CLI command `run` to trace new processes                     | 🔜 (v0.1) | ✅ |
-| CLI command `dump` to inspect trace session files            | 🔜 (v0.1) | ✅ |
-| Tracing backend (**x86** Linux): `ptrace` API                | 🔜 (v0.1) | <ul><li>[x] single-thread tracing</li><li>[ ] multi-thread tracing</li><li>[x] 32-bit process tracing</li><li>[x] 64-bit process tracing</li></ul> |
-| CLI command `dump`: symbolication of dumped addresses        | 🔜 (v0.1) |    |
-| Tracing backend (**x86** Windows): `debugapi` API            | ❓(TBD)   |    |
-| Tracing backend (**ARM** Linux): `ptrace` API                | ❓(TBD)   |    |
-| Tracing backend (**ARM** MacOS): `mach` (exception port) API | ❓(TBD)   |    |
-| Tracing backend (**ARM** Windows): `debugapi` API            | ❓(TBD)   |    |
-| WASM-based plugin system ([wasmtime?])                       | ❓(TBD)   |    |
-| CLI command `attach` to trace existing processes             | ❓(TBD)   |    |
-| **x86** Hardware-accelerated tracing (Intel PT)              | ❓(TBD)   |    |
-| **ARM** Hardware-accelerated tracing (ARM Coresight ETM)     | ❓(TBD)   |    |
-| UI to inspect trace session files                            | ❓(TBD)   |    |
-| Tracing backend: GDB Remote Protocol                         | ❓(TBD)   |    |
-| Tracing backend: Virtual Machine Introspection               | ❓(TBD)   |    |
+| Feature                                                  | Release   | Dev |
+|----------------------------------------------------------|-----------|-----|
+| CLI command `run` to trace new processes                 | 🔜 (v0.1) | ✅ |
+| CLI command `dump` to inspect trace session files        | 🔜 (v0.1) | ✅ |
+| Tracing backend (**x86** Linux): `ptrace`                | 🔜 (v0.1) | <ul><li>[x] single-thread tracing</li><li>[ ] multi-thread tracing</li><li>[x] 32-bit process tracing</li><li>[x] 64-bit process tracing</li></ul> |
+| CLI command `dump`: symbolication of dumped addresses    | 🔜 (v0.1) |    |
+| Tracing backend (**x86** Windows): `debugapi`            | ❓(TBD)   |    |
+| Tracing backend (**ARM** Linux): `ptrace`                | ❓(TBD)   |    |
+| Tracing backend (**ARM** MacOS): mach ports              | ❓(TBD)   |    |
+| Tracing backend (**ARM** Windows): `debugapi`            | ❓(TBD)   |    |
+| WASM-based plugin system ([wasmtime?])                   | ❓(TBD)   |    |
+| CLI command `attach` to trace existing processes         | ❓(TBD)   |    |
+| **x86** Hardware-accelerated tracing (Intel PT)          | ❓(TBD)   |    |
+| **ARM** Hardware-accelerated tracing (ARM Coresight ETM) | ❓(TBD)   |    |
+| UI to inspect trace session files                        | ❓(TBD)   |    |
+| Tracing backend: GDB Remote Protocol                     | ❓(TBD)   |    |
+| Tracing backend: Virtual Machine Introspection           | ❓(TBD)   |    |
 
 [wasmtime?]: https://component-model.bytecodealliance.org/runtimes/wasmtime.html
 
