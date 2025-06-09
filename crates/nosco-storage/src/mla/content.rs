@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
@@ -16,6 +17,9 @@ pub struct CallMetadata {
 
     /// Level information of the function call.
     pub level: CallLevel,
+
+    /// Time at which this metadata was written.
+    pub timestamp: SystemTime,
 }
 
 /// Level information of a function call.
@@ -89,6 +93,9 @@ pub struct StateUpdateDataHeader {
 pub struct StateUpdateOrigin {
     /// ID of the thread responsible for the update.
     pub thread_id: u64,
+
+    /// Time at which this update was written.
+    pub timestamp: SystemTime,
 
     /// ID (and instruction address) of the call responsible for the update.
     pub call_id: Option<(String, u64)>,

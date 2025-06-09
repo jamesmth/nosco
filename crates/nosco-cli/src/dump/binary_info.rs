@@ -119,40 +119,52 @@ impl PartialBinaryInformation {
     ) -> miette::Result<BinaryInformation> {
         let loaded = self
             .loaded
-            .map(|StateUpdateOrigin { thread_id, call_id }| {
-                call_id
-                    .map(|(call_id, addr)| {
-                        call_info_fetcher
-                            .fetch(call_id, reader)
-                            .map(|mut call_info| {
-                                if let Some(address) = call_info.address.as_mut() {
-                                    *address = addr;
-                                };
-                                call_info
-                            })
-                    })
-                    .transpose()
-                    .map(|call_info| (thread_id, call_info))
-            })
+            .map(
+                |StateUpdateOrigin {
+                     thread_id,
+                     call_id,
+                     timestamp: _,
+                 }| {
+                    call_id
+                        .map(|(call_id, addr)| {
+                            call_info_fetcher
+                                .fetch(call_id, reader)
+                                .map(|mut call_info| {
+                                    if let Some(address) = call_info.address.as_mut() {
+                                        *address = addr;
+                                    };
+                                    call_info
+                                })
+                        })
+                        .transpose()
+                        .map(|call_info| (thread_id, call_info))
+                },
+            )
             .transpose()?;
 
         let unloaded = self
             .unloaded
-            .map(|StateUpdateOrigin { thread_id, call_id }| {
-                call_id
-                    .map(|(call_id, addr)| {
-                        call_info_fetcher
-                            .fetch(call_id, reader)
-                            .map(|mut call_info| {
-                                if let Some(address) = call_info.address.as_mut() {
-                                    *address = addr;
-                                };
-                                call_info
-                            })
-                    })
-                    .transpose()
-                    .map(|call_info| (thread_id, call_info))
-            })
+            .map(
+                |StateUpdateOrigin {
+                     thread_id,
+                     call_id,
+                     timestamp: _,
+                 }| {
+                    call_id
+                        .map(|(call_id, addr)| {
+                            call_info_fetcher
+                                .fetch(call_id, reader)
+                                .map(|mut call_info| {
+                                    if let Some(address) = call_info.address.as_mut() {
+                                        *address = addr;
+                                    };
+                                    call_info
+                                })
+                        })
+                        .transpose()
+                        .map(|call_info| (thread_id, call_info))
+                },
+            )
             .transpose()?;
 
         Ok(BinaryInformation {

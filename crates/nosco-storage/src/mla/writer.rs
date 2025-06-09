@@ -3,6 +3,7 @@ use std::io::{Cursor, Write};
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
+use std::time::SystemTime;
 
 use mla::config::ArchiveWriterConfig;
 use mla::{ArchiveWriter, Layers};
@@ -342,6 +343,7 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
                 thread_id,
                 addr: call_addr,
                 level,
+                timestamp: SystemTime::now(),
             },
         )?;
 
@@ -561,7 +563,11 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
 
         Ok(StateUpdateDataHeader {
             update_id,
-            update_origin: StateUpdateOrigin { thread_id, call_id },
+            update_origin: StateUpdateOrigin {
+                thread_id,
+                timestamp: SystemTime::now(),
+                call_id,
+            },
         })
     }
 

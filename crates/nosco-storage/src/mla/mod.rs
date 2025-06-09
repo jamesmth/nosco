@@ -12,10 +12,10 @@ mod tests {
     use std::io::Cursor;
     use std::path::Path;
 
-    use super::content::{StateChangeData, StateUpdateOrigin};
+    use super::content::StateChangeData;
     use super::{MlaStorageReader, MlaStorageWriter};
     use crate::TraceSessionStorageWriter;
-    use crate::mla::content::{CallData, CallLevel, CallMetadata};
+    use crate::mla::content::{CallData, CallLevel};
     use crate::mla::reader::BacktraceElement;
 
     #[test]
@@ -230,26 +230,18 @@ mod tests {
 
         assert_eq!(binary_updates.len(), 2);
 
+        assert_eq!(binary_updates[0].0.thread_id, 1);
+        assert_eq!(binary_updates[0].0.call_id, None);
         assert_eq!(
-            binary_updates[0],
-            (
-                StateUpdateOrigin {
-                    thread_id: 1,
-                    call_id: None
-                },
-                StateChangeData::UnloadedBinary { unload_addr: 0x0 }
-            )
+            binary_updates[0].1,
+            StateChangeData::UnloadedBinary { unload_addr: 0x0 }
         );
 
+        assert_eq!(binary_updates[1].0.thread_id, 1);
+        assert_eq!(binary_updates[1].0.call_id, None);
         assert_eq!(
-            binary_updates[1],
-            (
-                StateUpdateOrigin {
-                    thread_id: 1,
-                    call_id: None
-                },
-                StateChangeData::UnloadedBinary { unload_addr: 0x1 }
-            )
+            binary_updates[1].1,
+            StateChangeData::UnloadedBinary { unload_addr: 0x1 }
         );
     }
 
@@ -294,18 +286,14 @@ mod tests {
 
         assert_eq!(threads_updates.len(), 1);
 
+        assert_eq!(threads_updates[0].0.thread_id, 1);
+        assert_eq!(threads_updates[0].0.call_id, None);
         assert_eq!(
-            threads_updates[0],
-            (
-                StateUpdateOrigin {
-                    thread_id: 1,
-                    call_id: None
-                },
-                StateChangeData::CreatedThread {
-                    thread_id: 2,
-                    root_call_ids: vec![],
-                }
-            )
+            threads_updates[0].1,
+            StateChangeData::CreatedThread {
+                thread_id: 2,
+                root_call_ids: vec![],
+            }
         );
     }
 
@@ -337,32 +325,24 @@ mod tests {
 
         assert_eq!(thread_updates.len(), 3);
 
+        assert_eq!(thread_updates[1].0.thread_id, 2);
+        assert_eq!(thread_updates[1].0.call_id, None);
         assert_eq!(
-            thread_updates[1],
-            (
-                StateUpdateOrigin {
-                    thread_id: 2,
-                    call_id: None
-                },
-                StateChangeData::ExitedThread {
-                    thread_id: 2,
-                    exit_code: 0
-                }
-            )
+            thread_updates[1].1,
+            StateChangeData::ExitedThread {
+                thread_id: 2,
+                exit_code: 0
+            }
         );
 
+        assert_eq!(thread_updates[2].0.thread_id, 1);
+        assert_eq!(thread_updates[2].0.call_id, None);
         assert_eq!(
-            thread_updates[2],
-            (
-                StateUpdateOrigin {
-                    thread_id: 1,
-                    call_id: None
-                },
-                StateChangeData::ExitedThread {
-                    thread_id: 1,
-                    exit_code: 0
-                }
-            )
+            thread_updates[2].1,
+            StateChangeData::ExitedThread {
+                thread_id: 1,
+                exit_code: 0
+            }
         );
     }
 
@@ -397,14 +377,9 @@ mod tests {
 
         assert_eq!(call_data.len(), 1);
 
-        assert_eq!(
-            call_metadata,
-            CallMetadata {
-                thread_id: 1,
-                addr: 0x0,
-                level: CallLevel::Root { backtrace: vec![] }
-            }
-        );
+        assert_eq!(call_metadata.thread_id, 1);
+        assert_eq!(call_metadata.addr, 0x0);
+        assert_eq!(call_metadata.level, CallLevel::Root { backtrace: vec![] });
 
         assert_eq!(
             call_data[0],
@@ -468,14 +443,12 @@ mod tests {
 
         assert_eq!(call_data.len(), 1);
 
+        assert_eq!(call_metadata.thread_id, 1);
+        assert_eq!(call_metadata.addr, 0x0);
         assert_eq!(
-            call_metadata,
-            CallMetadata {
-                thread_id: 1,
-                addr: 0x0,
-                level: CallLevel::Root {
-                    backtrace: vec![0x1, 0x2]
-                }
+            call_metadata.level,
+            CallLevel::Root {
+                backtrace: vec![0x1, 0x2]
             }
         );
 
@@ -531,14 +504,9 @@ mod tests {
 
         assert!(call_data.is_empty());
 
-        assert_eq!(
-            call_metadata,
-            CallMetadata {
-                thread_id: 1,
-                addr: 0x0,
-                level: CallLevel::Root { backtrace: vec![] }
-            }
-        );
+        assert_eq!(call_metadata.thread_id, 1);
+        assert_eq!(call_metadata.addr, 0x0);
+        assert_eq!(call_metadata.level, CallLevel::Root { backtrace: vec![] });
 
         let backtrace = reader
             .backtrace_reader(&root_call_ids[1])
@@ -553,14 +521,9 @@ mod tests {
 
         assert!(call_data.is_empty());
 
-        assert_eq!(
-            call_metadata,
-            CallMetadata {
-                thread_id: 1,
-                addr: 0x1,
-                level: CallLevel::Root { backtrace: vec![] }
-            }
-        );
+        assert_eq!(call_metadata.thread_id, 1);
+        assert_eq!(call_metadata.addr, 0x1);
+        assert_eq!(call_metadata.level, CallLevel::Root { backtrace: vec![] });
     }
 
     #[test]
