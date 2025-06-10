@@ -211,12 +211,14 @@ pub(super) fn kdl_node_from_state_change_data(state_change_data: &StateChangeDat
                 .push(KdlEntry::new(i128::from(*thread_id)));
             node
         }
-        StateChangeData::LoadedBinary { path, load_addr } => {
+        StateChangeData::LoadedBinary { path, addr_range } => {
             let mut node = KdlNode::new("load_binary");
             node.entries_mut()
                 .push(KdlEntry::new(path.display().to_string()));
-            node.entries_mut()
-                .push(KdlEntry::new_prop("addr", format!("{load_addr:#x}")));
+            node.entries_mut().push(KdlEntry::new_prop(
+                "addr_range",
+                format!("{addr_range:#x?}"),
+            ));
             node
         }
         StateChangeData::UnloadedBinary { unload_addr } => {

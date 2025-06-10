@@ -80,7 +80,7 @@ impl ScopedTraceState {
         }
 
         self.traced_functions
-            .insert(binary.base_addr(), resolved_addrs);
+            .insert(binary.addr_range().start, resolved_addrs);
 
         Ok(())
     }

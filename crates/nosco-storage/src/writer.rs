@@ -1,4 +1,5 @@
 use std::future::{self, Future};
+use std::ops::Range;
 use std::path::Path;
 
 /// Trait for implementing a tracing session storage writer.
@@ -49,7 +50,7 @@ pub trait TraceSessionStorageWriter {
         &mut self,
         _thread_id: Option<u64>,
         _binary: &Path,
-        _load_addr: u64,
+        _addr_range: Range<u64>,
     ) -> impl Future<Output = std::result::Result<(), Self::Error>> {
         future::ready(Ok(()))
     }

@@ -103,7 +103,7 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         }
 
         self.mapped_images
-            .insert(binary.base_addr(), binary.file_name().to_owned());
+            .insert(binary.addr_range().start, binary.file_name().to_owned());
 
         Ok(())
     }

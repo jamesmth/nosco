@@ -156,11 +156,11 @@ mod tests {
                 let mut writer = MlaStorageWriter::from_writer(vec![]).unwrap();
 
                 writer
-                    .write_loaded_binary(None, Path::new("bin1"), 0x0)
+                    .write_loaded_binary(None, Path::new("bin1"), 0x0..0x1)
                     .await
                     .unwrap();
                 writer
-                    .write_loaded_binary(None, Path::new("bin2"), 0x1)
+                    .write_loaded_binary(None, Path::new("bin2"), 0x1..0x2)
                     .await
                     .unwrap();
 
@@ -181,7 +181,7 @@ mod tests {
             binaries_init[0],
             StateChangeData::LoadedBinary {
                 path: "bin1".into(),
-                load_addr: 0x0,
+                addr_range: 0x0..0x1,
             }
         );
 
@@ -189,7 +189,7 @@ mod tests {
             binaries_init[1],
             StateChangeData::LoadedBinary {
                 path: "bin2".into(),
-                load_addr: 0x1,
+                addr_range: 0x1..0x2,
             }
         );
     }
@@ -204,11 +204,11 @@ mod tests {
                 let mut writer = MlaStorageWriter::from_writer(vec![]).unwrap();
 
                 writer
-                    .write_loaded_binary(None, Path::new("bin1"), 0x0)
+                    .write_loaded_binary(None, Path::new("bin1"), 0x0..0x1)
                     .await
                     .unwrap();
                 writer
-                    .write_loaded_binary(None, Path::new("bin2"), 0x1)
+                    .write_loaded_binary(None, Path::new("bin2"), 0x1..0x2)
                     .await
                     .unwrap();
 

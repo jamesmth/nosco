@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::ops::Range;
 use std::path::Path;
 
 /// Trait providing functions for working with mapped binary information.
@@ -9,8 +10,8 @@ pub trait BinaryInformation {
     /// Error returned by this trait.
     type Error;
 
-    /// Base address of the mapped binary.
-    fn base_addr(&self) -> u64;
+    /// Address range of the mapped binary.
+    fn addr_range(&self) -> &Range<u64>;
 
     /// File name of the binary.
     fn file_name(&self) -> &str;

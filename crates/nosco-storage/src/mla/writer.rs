@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use std::mem;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::SystemTime;
@@ -113,12 +114,12 @@ impl<W> TraceSessionStorageWriter for MlaStorageWriter<W> {
         &mut self,
         thread_id: Option<u64>,
         binary_path: &Path,
-        load_addr: u64,
+        addr_range: Range<u64>,
     ) -> Result<(), Self::Error> {
         self.send_storage_action(StorageAction::WriteLoadedBinary {
             thread_id,
             path: binary_path.to_path_buf(),
-            load_addr,
+            addr_range,
         })
         .await
     }
@@ -232,9 +233,9 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
                 StorageAction::WriteLoadedBinary {
                     thread_id,
                     path,
-                    load_addr,
+                    addr_range,
                 } => {
-                    self.write_loaded_binary(thread_id, path, load_addr)?;
+                    self.write_loaded_binary(thread_id, path, addr_range)?;
                 }
                 StorageAction::WriteUnloadedBinary {
                     thread_id,
@@ -405,9 +406,9 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
         &mut self,
         thread_id: Option<u64>,
         path: PathBuf,
-        load_addr: u64,
+        addr_range: Range<u64>,
     ) -> crate::Result<()> {
-        let state_change = StateChangeData::LoadedBinary { path, load_addr };
+        let state_change = StateChangeData::LoadedBinary { path, addr_range };
 
         if let Some(thread_id) = thread_id {
             self.write_state_update(thread_id, state_change)?;
@@ -616,7 +617,7 @@ enum StorageAction {
     WriteLoadedBinary {
         thread_id: Option<u64>,
         path: PathBuf,
-        load_addr: u64,
+        addr_range: Range<u64>,
     },
 
     WriteUnloadedBinary {

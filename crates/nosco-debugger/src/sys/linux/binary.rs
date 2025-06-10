@@ -2,6 +2,7 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use futures_util::TryFutureExt;
 use goblin::elf::header::ET_DYN;
 use goblin::elf::program_header::PT_LOAD;
 use goblin::elf::section_header::{SHN_UNDEF, SHN_XINDEX};
@@ -10,10 +11,12 @@ use goblin::strtab::Strtab;
 use tracing::Instrument;
 use wholesym::{LookupAddress, SymbolManager, SymbolMap};
 
+use super::session::LinkMap;
+
 /// Loaded image.
 pub struct MappedBinary {
-    /// Base address of the loaded binary.
-    addr: u64,
+    /// Address range of the loaded binary.
+    addr_range: Range<u64>,
 
     /// File name of the loaded binary.
     file_name: String,
@@ -26,13 +29,8 @@ pub struct MappedBinary {
 }
 
 impl MappedBinary {
-    /// Creates a new [MappedBinary].
-    pub fn new(base_addr: u64, path: &Path, symbol_manager: Arc<SymbolManager>) -> Self {
-        let path = match path.canonicalize() {
-            Ok(p) => p,
-            Err(_) => path.to_path_buf(),
-        };
-
+    /// Creates a new mapped binary for symbol resolution.
+    pub fn new(addr_range: Range<u64>, path: PathBuf, symbol_manager: Arc<SymbolManager>) -> Self {
         let file_name = path
             .file_name()
             .unwrap_or_default()
@@ -40,57 +38,48 @@ impl MappedBinary {
             .into_owned();
 
         Self {
-            addr: base_addr,
-            file_name,
+            addr_range,
             path,
-            symbol_manager: symbol_manager.clone(),
+            file_name,
+            symbol_manager,
         }
     }
 
-    pub async fn to_unwind_module(&self) -> crate::sys::Result<framehop::Module<Vec<u8>>> {
-        let elf = tokio::fs::read(&self.path)
-            .await
-            .map_err(|e| crate::sys::Error::File(self.path.clone(), e))?;
+    /// Creates a [MappedBinary] from a [LinkMap].
+    ///
+    /// A [Module](framehop::Module) is returned as well to allow unwinding.
+    pub(super) async fn from_link_map(
+        lm: &LinkMap,
+        symbol_manager: Arc<SymbolManager>,
+    ) -> crate::sys::Result<(Self, Option<framehop::Module<Vec<u8>>>)> {
+        let path = Path::new(&lm.name);
+        let path = match path.canonicalize() {
+            Ok(p) => p,
+            Err(_) => path.to_path_buf(),
+        };
 
-        let elf_header = Elf::parse_header(&elf)?;
-        let elf_ctx =
-            goblin::container::Ctx::new(elf_header.container()?, elf_header.endianness()?);
+        let (binary, unwind_module) = if let Ok((addr_range, sections_info)) =
+            retrieve_unwind_module_section_info(lm.base_addr, &path)
+                .inspect_err(|e| tracing::warn!(error = %e))
+                .instrument(tracing::error_span!("UnwindModule", path = %path.display()))
+                .await
+        {
+            let binary = Self::new(addr_range, path, symbol_manager);
 
-        let phdrs = ProgramHeader::parse(
-            &elf,
-            elf_header.e_phoff as usize,
-            elf_header.e_phnum as usize,
-            elf_ctx,
-        )?;
+            let unwind_module = framehop::Module::new(
+                binary.file_name.clone(),
+                binary.addr_range.clone(),
+                binary.addr_range.start,
+                sections_info,
+            );
 
-        let (last_load_vaddr, last_load_len) = phdrs
-            .iter()
-            .rev()
-            .find_map(|phdr| (phdr.p_type == PT_LOAD).then_some((phdr.p_vaddr, phdr.p_memsz)))
-            .ok_or(crate::sys::Error::MissingPtLoad)?;
-
-        let (base_svma, end_addr) = if elf_header.e_type == ET_DYN {
-            // PIE executable or dylib
-            (0, self.addr + last_load_vaddr + last_load_len)
+            (binary, Some(unwind_module))
         } else {
-            (self.addr, last_load_vaddr + last_load_len)
+            let binary = Self::new(lm.base_addr..lm.base_addr, path, symbol_manager);
+            (binary, None)
         };
 
-        tracing::debug!(end_addr = format!("{end_addr:#x}"));
-
-        let mut sections_info = framehop::ExplicitModuleSectionInfo {
-            base_svma,
-            ..Default::default()
-        };
-
-        parse_sections_info(&elf, &elf_header, elf_ctx, &mut sections_info)?;
-
-        Ok(framehop::Module::new(
-            self.file_name.clone(),
-            self.addr..end_addr,
-            self.addr,
-            sections_info,
-        ))
+        Ok((binary, unwind_module))
     }
 }
 
@@ -98,22 +87,18 @@ impl nosco_tracer::debugger::BinaryInformation for MappedBinary {
     type View = MappedBinaryView;
     type Error = crate::Error;
 
-    /// Returns the base address of the loaded binary.
-    fn base_addr(&self) -> u64 {
-        self.addr
+    fn addr_range(&self) -> &Range<u64> {
+        &self.addr_range
     }
 
-    /// Returns the file name of the loaded binary.
     fn file_name(&self) -> &str {
         &self.file_name
     }
 
-    /// Returns the path from which the linker loaded the loaded binary.
     fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Retrieves the in-memory view of the binary.
     async fn to_view(&self) -> crate::Result<MappedBinaryView> {
         let symbol_map = self
             .symbol_manager
@@ -122,7 +107,7 @@ impl nosco_tracer::debugger::BinaryInformation for MappedBinary {
             .await?;
 
         Ok(MappedBinaryView {
-            addr: self.addr,
+            addr: self.addr_range.start,
             symbol_map,
         })
     }
@@ -173,6 +158,46 @@ impl nosco_tracer::debugger::BinaryView for MappedBinaryView {
 
         Ok(Some((info.symbol.name, addr - sym_addr)))
     }
+}
+
+async fn retrieve_unwind_module_section_info(
+    load_addr: u64,
+    path: &Path,
+) -> crate::sys::Result<(Range<u64>, framehop::ExplicitModuleSectionInfo<Vec<u8>>)> {
+    let elf = tokio::fs::read(path)
+        .await
+        .map_err(|e| crate::sys::Error::File(path.to_path_buf(), e))?;
+
+    let elf_header = Elf::parse_header(&elf)?;
+    let elf_ctx = goblin::container::Ctx::new(elf_header.container()?, elf_header.endianness()?);
+
+    let phdrs = ProgramHeader::parse(
+        &elf,
+        elf_header.e_phoff as usize,
+        elf_header.e_phnum as usize,
+        elf_ctx,
+    )?;
+
+    let end_vaddr = phdrs
+        .iter()
+        .rev()
+        .find_map(|phdr| (phdr.p_type == PT_LOAD).then_some(phdr.p_vaddr + phdr.p_memsz))
+        .ok_or(crate::sys::Error::MissingPtLoad)?;
+
+    let (base_svma, addr_range) = if elf_header.e_type == ET_DYN {
+        (0, load_addr..load_addr + end_vaddr)
+    } else {
+        (load_addr, load_addr..end_vaddr)
+    };
+
+    let mut sections_info = framehop::ExplicitModuleSectionInfo {
+        base_svma,
+        ..Default::default()
+    };
+
+    parse_sections_info(&elf, &elf_header, elf_ctx, &mut sections_info)?;
+
+    Ok((addr_range, sections_info))
 }
 
 fn parse_sections_info(

@@ -37,7 +37,7 @@ impl<S: TraceSessionStorageWriter> EventHandler for TraceEventHandler<S> {
         binary: &<Self::Session as nosco_tracer::debugger::DebugSession>::MappedBinary,
     ) -> Result<(), Self::Error> {
         self.storage
-            .write_loaded_binary(thread_id, binary.path(), binary.base_addr())
+            .write_loaded_binary(thread_id, binary.path(), binary.addr_range().clone())
             .await
             .map_err(StorageError)?;
 

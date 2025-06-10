@@ -69,9 +69,9 @@ impl Session {
             scan.lms = rdebug.fetch_link_maps()?;
         }
 
-        for LinkMap { base_addr, name } in scan.lms.iter() {
-            let binary = MappedBinary::new(*base_addr, Path::new(name), symbol_manager.clone());
-            session_cx.on_binary_loaded(binary).await;
+        for lm in scan.lms.iter() {
+            let (binary, unwind) = MappedBinary::from_link_map(lm, symbol_manager.clone()).await?;
+            session_cx.on_binary_loaded(binary, unwind).await;
         }
 
         Ok(Session {
@@ -98,10 +98,10 @@ impl Session {
 
             // refresh the link map to detect loaded/unloaded binaries
             if let Some(new_link_map) = rdebug.refresh()? {
-                for LinkMap { base_addr, name } in new_link_map.difference(&self.link_map) {
-                    let binary =
-                        MappedBinary::new(*base_addr, Path::new(name), self.symbol_manager.clone());
-                    session_cx.on_binary_loaded(binary).await;
+                for lm in new_link_map.difference(&self.link_map) {
+                    let (binary, unwind) =
+                        MappedBinary::from_link_map(lm, self.symbol_manager.clone()).await?;
+                    session_cx.on_binary_loaded(binary, unwind).await;
                 }
 
                 self.link_map

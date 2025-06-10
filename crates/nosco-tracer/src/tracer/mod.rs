@@ -317,7 +317,7 @@ where
             DebugStateChange::BinaryLoaded(binary) => {
                 tracing::info!(
                     path = tracing::field::display(binary.path().display()),
-                    addr = format_args!("{:#x}", binary.base_addr()),
+                    addr_range = format_args!("{:#x?}", binary.addr_range()),
                     "binary loaded"
                 );
 

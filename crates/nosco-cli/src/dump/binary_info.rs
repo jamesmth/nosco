@@ -1,4 +1,5 @@
 use std::io::{Read, Seek};
+use std::ops::Range;
 use std::path::PathBuf;
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};
@@ -40,12 +41,12 @@ fn fetch_partial_binaries_info(
         .state_init_reader()
         .into_diagnostic()?
         .filter_map(|res| match res {
-            Ok(StateChangeData::LoadedBinary { path, load_addr })
+            Ok(StateChangeData::LoadedBinary { path, addr_range })
                 if single_binary.is_none_or(|binary| path.ends_with(binary)) =>
             {
                 Some(Ok(PartialBinaryInformation {
                     path,
-                    load_addr,
+                    addr_range,
                     loaded: None,
                     unloaded: None,
                 }))
@@ -63,12 +64,12 @@ fn fetch_partial_binaries_info(
             .state_updates_reader()
             .into_diagnostic()?
             .filter_map(|res| match res {
-                Ok((update_origin, StateChangeData::LoadedBinary { path, load_addr }))
+                Ok((update_origin, StateChangeData::LoadedBinary { path, addr_range }))
                     if single_binary.is_none_or(|binary| path.ends_with(binary)) =>
                 {
                     Some(Ok(PartialBinaryInformation {
                         path,
-                        load_addr,
+                        addr_range,
                         loaded: Some(update_origin),
                         unloaded: None,
                     }))
@@ -95,7 +96,7 @@ fn fetch_partial_binaries_info(
 
         for info in binaries_info
             .iter_mut()
-            .filter(|info| info.load_addr == unload_addr)
+            .filter(|info| info.addr_range.start == unload_addr)
         {
             let timestamp_diff = info.loaded.as_ref().and_then(|load_update_origin| {
                 unload_update_origin
@@ -128,7 +129,7 @@ fn fetch_partial_binaries_info(
 
 struct PartialBinaryInformation {
     path: PathBuf,
-    load_addr: u64,
+    addr_range: Range<u64>,
     loaded: Option<StateUpdateOrigin>,
     unloaded: Option<StateUpdateOrigin>,
 }
@@ -191,7 +192,7 @@ impl PartialBinaryInformation {
 
         Ok(BinaryInformation {
             path: self.path,
-            load_addr: self.load_addr,
+            addr_range: self.addr_range,
             loaded,
             unloaded,
         })
@@ -200,7 +201,7 @@ impl PartialBinaryInformation {
 
 struct BinaryInformation {
     path: PathBuf,
-    load_addr: u64,
+    addr_range: Range<u64>,
     loaded: Option<(u64, Option<CallInformation>)>,
     unloaded: Option<(u64, Option<CallInformation>)>,
 }
@@ -211,9 +212,10 @@ impl BinaryInformation {
             .entries_mut()
             .push(self.path.display().to_string().into());
 
-        kdl_node
-            .entries_mut()
-            .push(KdlEntry::new_prop("addr", format!("{:#x}", self.load_addr)));
+        kdl_node.entries_mut().push(KdlEntry::new_prop(
+            "addr_range",
+            format!("{:#x?}", self.addr_range),
+        ));
 
         if let Some((thread_id, ref call_info)) = self.loaded {
             kdl_node.ensure_children().nodes_mut().push({

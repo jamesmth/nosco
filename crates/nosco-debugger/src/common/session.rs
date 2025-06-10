@@ -1,9 +1,8 @@
 use std::collections::VecDeque;
 
 use framehop::{FrameAddress, MayAllocateDuringUnwind, Unwinder};
-use nosco_tracer::debugger::{BinaryContext, BinaryInformation, Thread, ThreadRegisters};
+use nosco_tracer::debugger::{BinaryContext, Thread, ThreadRegisters};
 use nosco_tracer::debugger::{DebugEvent, DebugSession, DebugStateChange};
-use tracing::Instrument;
 use wholesym::samply_symbols::pdb::FallibleIterator;
 
 use super::DebugStop;
@@ -444,16 +443,14 @@ impl SessionCx<'_> {
             .map(|_| ())
     }
 
-    pub async fn on_binary_loaded(&mut self, binary: sys::MappedBinary) {
-        let span = tracing::error_span!("UnwindModule", name = binary.file_name());
-        async {
-            match binary.to_unwind_module().await {
-                Ok(module) => self.unwinder.add_module(module),
-                Err(e) => tracing::error!(error = %e),
-            }
-        }
-        .instrument(span)
-        .await;
+    pub async fn on_binary_loaded(
+        &mut self,
+        binary: sys::MappedBinary,
+        unwind_module: Option<framehop::Module<Vec<u8>>>,
+    ) {
+        if let Some(module) = unwind_module {
+            self.unwinder.add_module(module);
+        };
 
         let change = DebugStateChange::BinaryLoaded(binary);
 

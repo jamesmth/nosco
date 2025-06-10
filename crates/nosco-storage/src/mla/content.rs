@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use std::time::SystemTime;
+use std::{ops::Range, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -109,13 +109,13 @@ pub enum StateChangeData {
         /// Absolute path of the binary.
         path: PathBuf,
 
-        /// Addresses of the loaded binary.
-        load_addr: u64,
+        /// Address range of the loaded binary.
+        addr_range: Range<u64>,
     },
 
     /// Data related to an unloaded binary.
     UnloadedBinary {
-        /// Addresses of the unloaded binary.
+        /// Address of the unloaded binary.
         unload_addr: u64,
     },
 
