@@ -14,7 +14,7 @@ use self::opcode::{Opcodes, OpcodesType};
 use self::state::{FullTraceState, ScopedTraceConfig, ScopedTraceState};
 pub use self::tracee::{TracedProcess, TracedProcessStdio};
 use crate::Command;
-use crate::debugger::{BinaryInformation, DebugEvent, DebugStateChange, Debugger, ThreadRegisters};
+use crate::debugger::{DebugEvent, DebugStateChange, Debugger, MappedBinary, ThreadRegisters};
 use crate::debugger::{DebugSession, ExitStatus, Thread};
 use crate::debugger::{RegistersAarch64, RegistersArm, RegistersX86, RegistersX86_64};
 use crate::error::{DebuggerError, HandlerError};
@@ -314,7 +314,7 @@ where
         prev_instrs: &mut HashMap<u64, (u64, Opcodes)>,
     ) -> crate::Result<(), S::Error, H::Error> {
         match state_change {
-            DebugStateChange::BinaryLoaded(binary) => {
+            DebugStateChange::BinaryLoaded(mut binary) => {
                 tracing::info!(
                     path = tracing::field::display(binary.path().display()),
                     addr_range = format_args!("{:#x?}", binary.addr_range()),
@@ -322,7 +322,7 @@ where
                 );
 
                 self.handler
-                    .binary_loaded(&mut self.session, thread_id, &binary)
+                    .binary_loaded(&mut self.session, thread_id, &mut binary)
                     .await
                     .map_err(HandlerError)?;
 

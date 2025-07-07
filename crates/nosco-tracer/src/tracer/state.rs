@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-//use super::binary::MappedBinaries;
-use crate::debugger::{BinaryInformation, BinaryView, DebugSession};
+use crate::debugger::{DebugSession, MappedBinary};
 use crate::error::DebuggerError;
 use crate::handler::EventHandler;
 
@@ -47,16 +46,11 @@ impl ScopedTraceState {
     pub async fn register_mapped_binary<S: DebugSession, H: EventHandler>(
         &mut self,
         session: &mut S,
-        binary: S::MappedBinary,
+        mut binary: S::MappedBinary,
     ) -> crate::Result<(), S::Error, H::Error> {
         let Some(unresolved) = self.traced_functions_unresolved.get(binary.file_name()) else {
             return Ok(());
         };
-
-        let binary_view = binary
-            .to_view()
-            .await
-            .map_err(|e| DebuggerError(e.into()))?;
 
         let mut resolved_addrs = Vec::with_capacity(unresolved.len());
 
@@ -64,9 +58,10 @@ impl ScopedTraceState {
             let span = tracing::info_span!("ResolveSymbol", binary = binary.file_name(), symbol);
             let _guard = span.enter();
 
-            let addr = binary_view
+            let addr = binary
                 .addr_of_symbol(symbol)
-                .map_err(|e| DebuggerError(e.into().into()))?
+                .await
+                .map_err(|e| DebuggerError(e.into()))?
                 .ok_or_else(|| {
                     crate::Error::SymbolNotFound(binary.file_name().to_owned(), symbol.clone())
                 })?;

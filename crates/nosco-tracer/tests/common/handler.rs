@@ -1,17 +1,16 @@
 use std::collections::HashMap;
 
 use kdl::{KdlDocument, KdlNode};
-use nosco_tracer::debugger::BinaryView;
+use nosco_tracer::debugger::MappedBinary;
 use regex::Regex;
 
-type MappedBinary = <nosco_debugger::Session as nosco_tracer::debugger::DebugSession>::MappedBinary;
-type MappedView = <MappedBinary as nosco_tracer::debugger::BinaryInformation>::View;
+type MappedBin = <nosco_debugger::Session as nosco_tracer::debugger::DebugSession>::MappedBinary;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {}
 
 pub struct TestTraceHandler {
-    mapped_exe: Option<MappedView>,
+    mapped_exe: Option<MappedBin>,
     disass: capstone::Capstone,
     exe_name: String,
     last_fn_addr: Vec<u64>,
@@ -70,13 +69,10 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         &mut self,
         _session: &mut Self::Session,
         thread_id: Option<u64>,
-        binary: &<Self::Session as nosco_tracer::debugger::DebugSession>::MappedBinary,
+        binary: &mut MappedBin,
     ) -> Result<(), Self::Error> {
-        use nosco_tracer::debugger::BinaryInformation;
-
         let binary_name = if binary.file_name() == self.exe_name {
-            let view = binary.to_view().await.expect("view");
-            self.mapped_exe = Some(view);
+            self.mapped_exe = Some(binary.clone());
             "<exe>"
         } else {
             binary.file_name()
@@ -143,7 +139,7 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
 
         let symbol = self
             .mapped_exe
-            .as_ref()
+            .as_mut()
             .unwrap()
             .symbol_of_addr(thread.instr_addr())
             .await
@@ -164,7 +160,7 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
             for addr in backtrace.into_iter().rev() {
                 let symbol = self
                     .mapped_exe
-                    .as_ref()
+                    .as_mut()
                     .unwrap()
                     .symbol_of_addr(addr)
                     .await

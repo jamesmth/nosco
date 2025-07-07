@@ -3,7 +3,7 @@ mod thread;
 
 use std::future::Future;
 
-pub use self::binary::{BinaryInformation, BinaryView};
+pub use self::binary::MappedBinary;
 pub use self::thread::Thread;
 use crate::Command;
 use crate::tracer::TracedProcessStdio;
@@ -28,7 +28,7 @@ pub trait Debugger {
 /// Trait implementing the instrumentation logic of a debugger.
 pub trait DebugSession {
     /// Type of a binary mapped into the debuggee's address space.
-    type MappedBinary: BinaryInformation<Error: Into<Self::Error>>;
+    type MappedBinary: MappedBinary<Error: Into<Self::Error>>;
 
     /// Type of a debuggee's stopped thread.
     type StoppedThread: Thread<Error: Into<Self::Error>>;

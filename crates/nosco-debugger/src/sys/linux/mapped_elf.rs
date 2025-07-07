@@ -13,8 +13,9 @@ use wholesym::{LookupAddress, SymbolManager, SymbolMap};
 
 use super::session::LinkMap;
 
-/// Loaded image.
-pub struct MappedBinary {
+/// Loaded ELF image.
+#[derive(Clone)]
+pub struct MappedElf {
     /// Address range of the loaded binary.
     addr_range: Range<u64>,
 
@@ -26,9 +27,12 @@ pub struct MappedBinary {
 
     /// Binary symbol resolver.
     symbol_manager: Arc<SymbolManager>,
+
+    /// Symbols of the loaded binary.
+    symbol_map: Option<Arc<SymbolMap>>,
 }
 
-impl MappedBinary {
+impl MappedElf {
     /// Creates a new mapped binary for symbol resolution.
     pub fn new(addr_range: Range<u64>, path: PathBuf, symbol_manager: Arc<SymbolManager>) -> Self {
         let file_name = path
@@ -42,6 +46,7 @@ impl MappedBinary {
             path,
             file_name,
             symbol_manager,
+            symbol_map: None,
         }
     }
 
@@ -83,8 +88,7 @@ impl MappedBinary {
     }
 }
 
-impl nosco_tracer::debugger::BinaryInformation for MappedBinary {
-    type View = MappedBinaryView;
+impl nosco_tracer::debugger::MappedBinary for MappedElf {
     type Error = crate::Error;
 
     fn addr_range(&self) -> &Range<u64> {
@@ -99,41 +103,25 @@ impl nosco_tracer::debugger::BinaryInformation for MappedBinary {
         &self.path
     }
 
-    async fn to_view(&self) -> crate::Result<MappedBinaryView> {
-        let symbol_map = self
-            .symbol_manager
-            .load_symbol_map_for_binary_at_path(&self.path, None)
-            .instrument(tracing::info_span!("LoadSymbols", binary = self.file_name))
-            .await?;
-
-        Ok(MappedBinaryView {
-            addr: self.addr_range.start,
-            symbol_map,
-        })
-    }
-}
-
-/// In-memory view of a loaded binary.
-pub struct MappedBinaryView {
-    /// Base address of the loaded binary.
-    addr: u64,
-
-    /// Symbols of the loaded binary.
-    symbol_map: SymbolMap,
-}
-
-impl nosco_tracer::debugger::BinaryView for MappedBinaryView {
-    type Error = crate::Error;
-
     /// Returns the address of the given symbol from the mapped binary.
-    fn addr_of_symbol(&self, symbol: impl AsRef<str>) -> crate::Result<Option<u64>> {
-        let offset = self
-            .symbol_map
+    async fn addr_of_symbol(&mut self, symbol: impl AsRef<str>) -> crate::Result<Option<u64>> {
+        let symbol_map = if let Some(ref symbol_map) = self.symbol_map {
+            symbol_map
+        } else {
+            let symbol_map = self
+                .symbol_manager
+                .load_symbol_map_for_binary_at_path(&self.path, None)
+                .instrument(tracing::info_span!("LoadSymbols", binary = self.file_name))
+                .await?;
+            self.symbol_map.get_or_insert(Arc::new(symbol_map))
+        };
+
+        let offset = symbol_map
             .iter_symbols()
             .find_map(|(offset, name)| (name == symbol.as_ref()).then_some(offset));
 
         match offset {
-            Some(offset) => Ok(Some(self.addr + offset as u64)),
+            Some(offset) => Ok(Some(self.addr_range.start + offset as u64)),
             None => Ok(None),
         }
     }
@@ -141,20 +129,30 @@ impl nosco_tracer::debugger::BinaryView for MappedBinaryView {
     /// Returns the closest symbol to the given address.
     ///
     /// An offset from the start of the symbol is given as well.
-    async fn symbol_of_addr(&self, addr: u64) -> crate::Result<Option<(String, u64)>> {
-        let Some(rela_addr) = addr.checked_sub(self.addr) else {
+    async fn symbol_of_addr(&mut self, addr: u64) -> crate::Result<Option<(String, u64)>> {
+        let Some(rela_addr) = addr.checked_sub(self.addr_range.start) else {
             return Ok(None);
         };
 
-        let Some(info) = self
-            .symbol_map
+        let symbol_map = if let Some(ref symbol_map) = self.symbol_map {
+            symbol_map
+        } else {
+            let symbol_map = self
+                .symbol_manager
+                .load_symbol_map_for_binary_at_path(&self.path, None)
+                .instrument(tracing::info_span!("LoadSymbols", binary = self.file_name))
+                .await?;
+            self.symbol_map.get_or_insert(Arc::new(symbol_map))
+        };
+
+        let Some(info) = symbol_map
             .lookup(LookupAddress::Relative(rela_addr as u32))
             .await
         else {
             return Ok(None);
         };
 
-        let sym_addr = self.addr + info.symbol.address as u64;
+        let sym_addr = self.addr_range.start + info.symbol.address as u64;
 
         Ok(Some((info.symbol.name, addr - sym_addr)))
     }

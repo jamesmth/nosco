@@ -17,7 +17,7 @@ use wholesym::{SymbolManager, SymbolManagerConfig};
 
 pub use self::rdebug::LinkMap;
 use self::rdebug::RDebug;
-use super::binary::MappedBinary;
+use super::mapped_elf::MappedElf;
 use super::process::TracedProcessHandle;
 use super::{Exception, mem};
 use crate::common::DebugStop;
@@ -70,7 +70,7 @@ impl Session {
         }
 
         for lm in scan.lms.iter() {
-            let (binary, unwind) = MappedBinary::from_link_map(lm, symbol_manager.clone()).await?;
+            let (binary, unwind) = MappedElf::from_link_map(lm, symbol_manager.clone()).await?;
             session_cx.on_binary_loaded(binary, unwind).await;
         }
 
@@ -100,7 +100,7 @@ impl Session {
             if let Some(new_link_map) = rdebug.refresh()? {
                 for lm in new_link_map.difference(&self.link_map) {
                     let (binary, unwind) =
-                        MappedBinary::from_link_map(lm, self.symbol_manager.clone()).await?;
+                        MappedElf::from_link_map(lm, self.symbol_manager.clone()).await?;
                     session_cx.on_binary_loaded(binary, unwind).await;
                 }
 

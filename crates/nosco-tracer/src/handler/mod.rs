@@ -48,7 +48,7 @@ pub trait EventHandler {
         &mut self,
         _session: &mut Self::Session,
         _thread_id: Option<u64>,
-        _binary: &<Self::Session as DebugSession>::MappedBinary,
+        _binary: &mut <Self::Session as DebugSession>::MappedBinary,
     ) -> impl Future<Output = Result<(), Self::Error>> {
         future::ready(Ok(()))
     }

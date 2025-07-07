@@ -235,7 +235,7 @@ impl DebugSession for Session {
     type RegisterStateArm = sys::thread::Registers32;
     type RegisterStateAarch64 = sys::thread::Registers64;
 
-    type MappedBinary = sys::MappedBinary;
+    type MappedBinary = sys::MappedElf;
     type StoppedThread = super::thread::StoppedThread;
 
     type Exception = sys::Exception;
@@ -445,7 +445,7 @@ impl SessionCx<'_> {
 
     pub async fn on_binary_loaded(
         &mut self,
-        binary: sys::MappedBinary,
+        binary: sys::MappedElf,
         unwind_module: Option<framehop::Module<Vec<u8>>>,
     ) {
         if let Some(module) = unwind_module {

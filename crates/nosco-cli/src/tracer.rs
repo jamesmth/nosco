@@ -1,5 +1,5 @@
 use nosco_storage::TraceSessionStorageWriter;
-use nosco_tracer::debugger::{BinaryInformation, DebugSession, Thread};
+use nosco_tracer::debugger::{DebugSession, MappedBinary, Thread};
 use nosco_tracer::handler::EventHandler;
 
 /// Execution trace event handler.
@@ -34,7 +34,7 @@ impl<S: TraceSessionStorageWriter> EventHandler for TraceEventHandler<S> {
         &mut self,
         _session: &mut Self::Session,
         thread_id: Option<u64>,
-        binary: &<Self::Session as nosco_tracer::debugger::DebugSession>::MappedBinary,
+        binary: &mut <Self::Session as nosco_tracer::debugger::DebugSession>::MappedBinary,
     ) -> Result<(), Self::Error> {
         self.storage
             .write_loaded_binary(thread_id, binary.path(), binary.addr_range().clone())
