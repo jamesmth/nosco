@@ -70,8 +70,12 @@ impl Session {
         }
 
         for lm in scan.lms.iter() {
-            let (binary, unwind) = MappedElf::from_link_map(lm, symbol_manager.clone()).await?;
-            session_cx.on_binary_loaded(binary, unwind).await;
+            let mut binary = MappedElf::from_link_map(lm, symbol_manager.clone()).await?;
+            let unwind = binary
+                .to_unwind_module()
+                .await
+                .inspect_err(|e| tracing::warn!(error = %e));
+            session_cx.on_binary_loaded(binary, unwind.ok()).await;
         }
 
         Ok(Session {
@@ -99,9 +103,13 @@ impl Session {
             // refresh the link map to detect loaded/unloaded binaries
             if let Some(new_link_map) = rdebug.refresh()? {
                 for lm in new_link_map.difference(&self.link_map) {
-                    let (binary, unwind) =
+                    let mut binary =
                         MappedElf::from_link_map(lm, self.symbol_manager.clone()).await?;
-                    session_cx.on_binary_loaded(binary, unwind).await;
+                    let unwind = binary
+                        .to_unwind_module()
+                        .await
+                        .inspect_err(|e| tracing::warn!(error = %e));
+                    session_cx.on_binary_loaded(binary, unwind.ok()).await;
                 }
 
                 self.link_map
