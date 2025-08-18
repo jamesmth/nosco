@@ -14,6 +14,7 @@ repository.workspace = true
 framehop = { workspace = true }
 indexmap = { workspace = true }
 nosco-tracer = { workspace = true }
+nosco-symbol = { workspace = true, features = ["unwind"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -24,6 +25,7 @@ byteorder = { workspace = true }
 futures-util = { workspace = true }
 goblin = { workspace = true, features = ["std", "elf32", "elf64", "endian_fd"] }
 nix = { workspace = true, features = ["fs", "mman", "ptrace", "signal"] }
+nosco-symbol = { workspace = true, features = ["elf"] }
 scroll = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util"] }
 tokio-stream = { workspace = true, features = ["fs"] }

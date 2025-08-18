@@ -5,6 +5,10 @@ pub enum Error {
     #[error(transparent)]
     Wholesym(#[from] wholesym::Error),
 
+    /// Error from the [nosco-symbol] crate.
+    #[error(transparent)]
+    Symbol(#[from] nosco_symbol::Error),
+
     /// An untracked thread was discovered.
     #[error("Untracked thread {0}")]
     UntrackedThread(u64),

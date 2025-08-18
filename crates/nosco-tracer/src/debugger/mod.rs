@@ -118,7 +118,7 @@ pub trait DebugSession {
     ///
     /// # Note
     ///
-    /// If the thread is in [single-step mode](self::thread::Thread::single_step_mut),
+    /// If the thread is in [single-step mode](self::thread::Thread::is_single_step),
     /// this function makes the thread execute a single instruction.
     fn resume(&mut self, thread: Self::StoppedThread) -> Result<(), Self::Error>;
 }

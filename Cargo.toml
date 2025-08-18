@@ -17,6 +17,7 @@ repository = "https://github.com/jamesmth/nosco"
 [workspace.dependencies]
 nosco-debugger = { path = "crates/nosco-debugger" }
 nosco-storage = { path = "crates/nosco-storage" }
+nosco-symbol = { path = "crates/nosco-symbol" }
 nosco-tracer = { path = "crates/nosco-tracer" }
 
 bincode = "2.0.1"

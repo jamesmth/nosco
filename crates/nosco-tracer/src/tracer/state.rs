@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use tracing::Instrument;
+
 use crate::debugger::{DebugSession, MappedBinary};
 use crate::error::DebuggerError;
 use crate::handler::EventHandler;
@@ -56,22 +58,26 @@ impl ScopedTraceState {
 
         for (symbol, trace_depth) in unresolved.iter() {
             let span = tracing::info_span!("ResolveSymbol", binary = binary.file_name(), symbol);
-            let _guard = span.enter();
+            async {
+                let addr = binary
+                    .addr_of_symbol(symbol)
+                    .await
+                    .map_err(|e| DebuggerError(e.into()))?
+                    .ok_or_else(|| {
+                        crate::Error::SymbolNotFound(binary.file_name().to_owned(), symbol.clone())
+                    })?;
 
-            let addr = binary
-                .addr_of_symbol(symbol)
-                .await
-                .map_err(|e| DebuggerError(e.into()))?
-                .ok_or_else(|| {
-                    crate::Error::SymbolNotFound(binary.file_name().to_owned(), symbol.clone())
-                })?;
+                tracing::info!(addr = format_args!("{addr:#x}"), "resolved");
 
-            tracing::info!(addr = format_args!("{addr:#x}"), "resolved");
+                self.traced_functions_depth.insert(addr, *trace_depth);
+                resolved_addrs.push(addr);
 
-            self.traced_functions_depth.insert(addr, *trace_depth);
-            resolved_addrs.push(addr);
+                session.add_breakpoint(None, addr).map_err(DebuggerError)?;
 
-            session.add_breakpoint(None, addr).map_err(DebuggerError)?;
+                crate::Result::Ok(())
+            }
+            .instrument(span)
+            .await?;
         }
 
         self.traced_functions

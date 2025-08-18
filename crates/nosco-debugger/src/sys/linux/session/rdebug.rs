@@ -1,6 +1,7 @@
 use indexmap::IndexSet;
 use nix::sys::ptrace;
 use nix::unistd::Pid;
+use nosco_symbol::elf::LinkMap;
 use scroll::Pread;
 
 const RT_CONSISTENT: u64 = 0;
@@ -208,14 +209,4 @@ fn read_link_map(
     };
 
     Ok((LinkMap { base_addr, name }, next_addr))
-}
-
-/// Loaded shared object.
-#[derive(Hash, PartialEq, Eq)]
-pub struct LinkMap {
-    /// Base load address.
-    pub base_addr: u64,
-
-    /// Absolute file name of the loaded object.
-    pub name: String,
 }

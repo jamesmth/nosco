@@ -12,12 +12,11 @@ use nix::sys::ptrace;
 use nix::sys::signal::Signal;
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::Pid;
+use nosco_symbol::elf::{LinkMap, MappedElf};
 use nosco_tracer::debugger::ExitStatus;
 use wholesym::{SymbolManager, SymbolManagerConfig};
 
-pub use self::rdebug::LinkMap;
 use self::rdebug::RDebug;
-use super::mapped_elf::MappedElf;
 use super::process::TracedProcessHandle;
 use super::{Exception, mem};
 use crate::common::DebugStop;
@@ -49,7 +48,7 @@ impl Session {
         debuggee_handle: TracedProcessHandle,
         _thread_pids: &[u64],
         mut session_cx: SessionCx<'_>,
-    ) -> crate::sys::Result<Self> {
+    ) -> crate::Result<Self> {
         let mut symbol_manager = SymbolManager::with_config(SymbolManagerConfig::default());
         symbol_manager.set_observer(Some(Arc::new(SymbolManagerObserver)));
         let symbol_manager = Arc::new(symbol_manager);
@@ -92,7 +91,7 @@ impl Session {
         &mut self,
         addr: u64,
         mut session_cx: SessionCx<'_>,
-    ) -> crate::sys::Result<()> {
+    ) -> crate::Result<()> {
         let RDebugContext::Init(ref mut rdebug) = self.rdebug_cx else {
             return Ok(());
         };

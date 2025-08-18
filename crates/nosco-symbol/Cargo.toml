@@ -1,0 +1,30 @@
+[package]
+name = "nosco-symbol"
+version.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[features]
+unwind = ["framehop"]
+elf = ["goblin/elf32", "goblin/elf64", "nosco-tracer", "tokio", "tracing", "wholesym"]
+
+[dependencies]
+framehop = { workspace = true, optional = true }
+goblin = { workspace = true, optional = true, features = ["std", "endian_fd"] }
+nosco-tracer = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+wholesym = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

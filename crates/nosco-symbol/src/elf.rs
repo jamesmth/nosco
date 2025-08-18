@@ -4,13 +4,9 @@ use std::sync::Arc;
 
 use goblin::elf::header::ET_DYN;
 use goblin::elf::program_header::PT_LOAD;
-use goblin::elf::section_header::{SHN_UNDEF, SHN_XINDEX};
-use goblin::elf::{Elf, ProgramHeader, SectionHeader};
-use goblin::strtab::Strtab;
+use goblin::elf::{Elf, ProgramHeader};
 use tracing::Instrument;
 use wholesym::{LookupAddress, SymbolManager, SymbolMap};
-
-use super::session::LinkMap;
 
 /// Loaded ELF image.
 #[derive(Clone)]
@@ -31,6 +27,7 @@ pub struct MappedElf {
     symbol_map: Option<Arc<SymbolMap>>,
 
     /// Current state of unwind information retrieval for the loaded binary.
+    #[cfg(feature = "unwind")]
     unwind_info: Option<UnwindInfoState>,
 }
 
@@ -49,15 +46,16 @@ impl MappedElf {
             file_name,
             symbol_manager,
             symbol_map: None,
+            #[cfg(feature = "unwind")]
             unwind_info: None,
         }
     }
 
-    /// Creates a [MappedBinary] from a [LinkMap].
-    pub(super) async fn from_link_map(
+    /// Creates a `MappedElf` from a [LinkMap] (see `link.h` from glibc).
+    pub async fn from_link_map(
         lm: &LinkMap,
         symbol_manager: Arc<SymbolManager>,
-    ) -> crate::sys::Result<Self> {
+    ) -> crate::Result<Self> {
         let path = Path::new(&lm.name);
         let path = match path.canonicalize() {
             Ok(p) => p,
@@ -87,13 +85,19 @@ impl MappedElf {
                         end_vaddr
                     }
                 })
-                .ok_or(crate::sys::Error::MissingPtLoad)?;
+                .ok_or(crate::Error::MissingPtLoad)?;
 
-            let mut binary = Self::new(lm.base_addr..end_addr, path, symbol_manager);
-            binary.unwind_info = Some(UnwindInfoState::StoppedHalfway {
-                elf_header,
-                elf_ctx,
-            });
+            let binary = Self::new(lm.base_addr..end_addr, path, symbol_manager);
+
+            #[cfg(feature = "unwind")]
+            let binary = {
+                let mut binary = binary;
+                binary.unwind_info = Some(UnwindInfoState::NotRetrieved {
+                    elf_header,
+                    elf_ctx,
+                });
+                binary
+            };
 
             Ok(binary)
         } else {
@@ -101,25 +105,29 @@ impl MappedElf {
             Ok(Self::new(lm.base_addr..lm.base_addr, path, symbol_manager))
         }
     }
+}
 
+#[cfg(feature = "unwind")]
+impl MappedElf {
+    /// Returns a [Module](framehop::Module) associated with this `MappedElf`.
     #[tracing::instrument(name = "UnwindModule", skip_all, fields(path = %self.path.display()))]
-    pub async fn to_unwind_module(&mut self) -> crate::sys::Result<framehop::Module<Vec<u8>>> {
+    pub async fn to_unwind_module(&mut self) -> crate::Result<framehop::Module<Vec<u8>>> {
         let (elf, elf_header, elf_ctx) = match self.unwind_info {
             Some(UnwindInfoState::Retrieved(ref unwind_module)) => return Ok(unwind_module.clone()),
-            Some(UnwindInfoState::StoppedHalfway {
+            Some(UnwindInfoState::NotRetrieved {
                 elf_header,
                 elf_ctx,
             }) => {
                 let elf = tokio::fs::read(&self.path)
                     .await
-                    .map_err(|e| crate::sys::Error::File(self.path.to_path_buf(), e))?;
+                    .map_err(|e| crate::Error::File(self.path.to_path_buf(), e))?;
 
                 (elf, elf_header, elf_ctx)
             }
             None => {
                 let elf = tokio::fs::read(&self.path)
                     .await
-                    .map_err(|e| crate::sys::Error::File(self.path.to_path_buf(), e))?;
+                    .map_err(|e| crate::Error::File(self.path.to_path_buf(), e))?;
 
                 let elf_header = Elf::parse_header(&elf)?;
 
@@ -226,12 +234,17 @@ impl nosco_tracer::debugger::MappedBinary for MappedElf {
     }
 }
 
+#[cfg(feature = "unwind")]
 fn parse_sections_info(
     elf: &[u8],
     elf_header: &goblin::elf::Header,
     elf_ctx: goblin::container::Ctx,
     module_section_info: &mut framehop::ExplicitModuleSectionInfo<Vec<u8>>,
-) -> crate::sys::Result<()> {
+) -> crate::Result<()> {
+    use goblin::elf::SectionHeader;
+    use goblin::elf::section_header::{SHN_UNDEF, SHN_XINDEX};
+    use goblin::strtab::Strtab;
+
     let shdrs = SectionHeader::parse(
         elf,
         elf_header.e_shoff as usize,
@@ -302,10 +315,23 @@ fn parse_sections_info(
     Ok(())
 }
 
+/// Loaded shared object.
+///
+/// This struct should be used in the same context as a `link_map` from `glibc/elf/link.h`.
+#[derive(Hash, PartialEq, Eq)]
+pub struct LinkMap {
+    /// Base load address.
+    pub base_addr: u64,
+
+    /// Absolute file name of the loaded object.
+    pub name: String,
+}
+
+#[cfg(feature = "unwind")]
 #[derive(Clone)]
 enum UnwindInfoState {
     Retrieved(framehop::Module<Vec<u8>>),
-    StoppedHalfway {
+    NotRetrieved {
         elf_header: goblin::elf::Header,
         elf_ctx: goblin::container::Ctx,
     },

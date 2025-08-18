@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use framehop::{FrameAddress, MayAllocateDuringUnwind, Unwinder};
+use nosco_symbol::elf::MappedElf;
 use nosco_tracer::debugger::{BinaryContext, Thread, ThreadRegisters};
 use nosco_tracer::debugger::{DebugEvent, DebugSession, DebugStateChange};
 use wholesym::samply_symbols::pdb::FallibleIterator;
@@ -235,7 +236,7 @@ impl DebugSession for Session {
     type RegisterStateArm = sys::thread::Registers32;
     type RegisterStateAarch64 = sys::thread::Registers64;
 
-    type MappedBinary = sys::MappedElf;
+    type MappedBinary = MappedElf;
     type StoppedThread = super::thread::StoppedThread;
 
     type Exception = sys::Exception;
@@ -445,7 +446,7 @@ impl SessionCx<'_> {
 
     pub async fn on_binary_loaded(
         &mut self,
-        binary: sys::MappedElf,
+        binary: MappedElf,
         unwind_module: Option<framehop::Module<Vec<u8>>>,
     ) {
         if let Some(module) = unwind_module {

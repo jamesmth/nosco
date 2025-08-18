@@ -1,5 +1,4 @@
 mod error;
-mod mapped_elf;
 pub mod mem;
 pub mod process;
 mod session;
@@ -17,7 +16,6 @@ use nosco_tracer::Command;
 use nosco_tracer::tracer::TracedProcessStdio;
 
 pub use self::error::{Error, Result};
-pub use self::mapped_elf::MappedElf;
 use self::process::TracedProcessHandle;
 pub use self::session::Session;
 

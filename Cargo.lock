@@ -1503,6 +1503,7 @@ dependencies = [
  "goblin",
  "indexmap",
  "nix",
+ "nosco-symbol",
  "nosco-tracer",
  "scroll",
  "thiserror 2.0.12",
@@ -1523,6 +1524,19 @@ dependencies = [
  "serde",
  "thiserror 2.0.12",
  "tokio",
+]
+
+[[package]]
+name = "nosco-symbol"
+version = "0.0.0-reserved"
+dependencies = [
+ "framehop",
+ "goblin",
+ "nosco-tracer",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "wholesym",
 ]
 
 [[package]]
