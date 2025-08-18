@@ -42,6 +42,10 @@ pub enum CliAction {
         #[clap(short, long, value_name = "PATH")]
         output: Option<PathBuf>,
 
+        /// Configuration for symbolicating the dump.
+        #[clap(flatten)]
+        symbolicate_args: CliSymbolicate,
+
         /// The type of dump to perform.
         #[clap(subcommand)]
         dump_action: CliDumpAction,
@@ -110,10 +114,18 @@ pub struct CliCallInfo {
     /// Dump addresses information.
     #[clap(long)]
     pub addresses: bool,
+}
 
-    /// Dump symbols information, using the given trace symbols file.
-    #[clap(short, long, value_name = "PATH")]
-    pub symbols: Option<PathBuf>,
+/// Configuration for symbolicating the dump.
+#[derive(clap::Parser, Debug)]
+pub struct CliSymbolicate {
+    /// Whether to symbolicate the dump.
+    #[clap(short, long)]
+    pub symbolicate: bool,
+
+    /// Root path used by the symbol resolver to find binaries (executable, libraries).
+    #[clap(long, value_name = "PATH")]
+    pub sysroot: Option<PathBuf>,
 }
 
 impl CliOpts {

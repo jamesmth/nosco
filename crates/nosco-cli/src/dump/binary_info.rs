@@ -7,16 +7,18 @@ use miette::IntoDiagnostic;
 use nosco_storage::MlaStorageReader;
 use nosco_storage::content::{StateChangeData, StateUpdateOrigin};
 
+use super::SymbolResolver;
 use super::call_info::{CallInformation, CallInformationFetcher};
 
 pub fn dump_to_kdl(
     mut reader: MlaStorageReader<impl Read + Seek>,
     call_info_fetcher: CallInformationFetcher,
     single_binary: Option<String>,
+    mut resolver: Option<&mut SymbolResolver>,
 ) -> miette::Result<KdlDocument> {
     let binaries_info = fetch_partial_binaries_info(&mut reader, single_binary.as_deref())?
         .into_iter()
-        .map(|info| info.fetch_calls_info(&mut reader, call_info_fetcher))
+        .map(|info| info.fetch_calls_info(&mut reader, call_info_fetcher, resolver.as_deref_mut()))
         .collect::<miette::Result<Vec<_>>>()?;
 
     let mut kdl = KdlDocument::new();
@@ -32,7 +34,7 @@ pub fn dump_to_kdl(
     Ok(kdl)
 }
 
-fn fetch_partial_binaries_info(
+pub fn fetch_partial_binaries_info(
     reader: &mut MlaStorageReader<impl Read + Seek>,
     single_binary: Option<&str>,
 ) -> miette::Result<Vec<PartialBinaryInformation>> {
@@ -127,11 +129,11 @@ fn fetch_partial_binaries_info(
     Ok(binaries_info)
 }
 
-struct PartialBinaryInformation {
-    path: PathBuf,
-    addr_range: Range<u64>,
-    loaded: Option<StateUpdateOrigin>,
-    unloaded: Option<StateUpdateOrigin>,
+pub struct PartialBinaryInformation {
+    pub path: PathBuf,
+    pub addr_range: Range<u64>,
+    pub loaded: Option<StateUpdateOrigin>,
+    pub unloaded: Option<StateUpdateOrigin>,
 }
 
 impl PartialBinaryInformation {
@@ -139,6 +141,7 @@ impl PartialBinaryInformation {
         self,
         reader: &mut MlaStorageReader<'_, impl Read + Seek>,
         call_info_fetcher: CallInformationFetcher,
+        mut resolver: Option<&mut SymbolResolver>,
     ) -> miette::Result<BinaryInformation> {
         let loaded = self
             .loaded
@@ -151,7 +154,7 @@ impl PartialBinaryInformation {
                     call_id
                         .map(|(call_id, addr)| {
                             call_info_fetcher
-                                .fetch(call_id, reader)
+                                .fetch(call_id, reader, resolver.as_deref_mut())
                                 .map(|mut call_info| {
                                     if let Some(address) = call_info.address.as_mut() {
                                         *address = addr;
@@ -175,14 +178,14 @@ impl PartialBinaryInformation {
                  }| {
                     call_id
                         .map(|(call_id, addr)| {
-                            call_info_fetcher
-                                .fetch(call_id, reader)
-                                .map(|mut call_info| {
+                            call_info_fetcher.fetch(call_id, reader, resolver).map(
+                                |mut call_info| {
                                     if let Some(address) = call_info.address.as_mut() {
                                         *address = addr;
                                     };
                                     call_info
-                                })
+                                },
+                            )
                         })
                         .transpose()
                         .map(|call_info| (thread_id, call_info))

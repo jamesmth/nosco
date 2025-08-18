@@ -1487,10 +1487,12 @@ dependencies = [
  "miette",
  "nosco-debugger",
  "nosco-storage",
+ "nosco-symbol",
  "nosco-tracer",
  "thiserror 2.0.12",
  "tokio",
  "tracing-subscriber",
+ "wholesym",
 ]
 
 [[package]]

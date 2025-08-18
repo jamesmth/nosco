@@ -6,7 +6,7 @@ mod dump;
 mod run;
 mod tracer;
 
-pub use self::cli::{CliAction, CliDumpAction, CliOpts};
+pub use self::cli::{CliAction, CliDumpAction, CliOpts, CliSymbolicate};
 pub use self::config::{TraceConfig, TraceScope};
 pub use self::dump::evaluate_dump;
 pub use self::run::evaluate_run;

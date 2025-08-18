@@ -5,7 +5,7 @@ use std::fs::File;
 use std::path::PathBuf;
 
 use miette::IntoDiagnostic;
-use nosco_cli::{CliAction, CliDumpAction, CliOpts};
+use nosco_cli::{CliAction, CliDumpAction, CliOpts, CliSymbolicate};
 use tracing_subscriber::EnvFilter;
 
 fn main() {
@@ -29,8 +29,9 @@ fn main() {
         CliAction::Dump {
             input,
             output,
+            symbolicate_args,
             dump_action,
-        } => evaluate_dump(input, output, dump_action).map(|_| None),
+        } => evaluate_dump(input, output, symbolicate_args, dump_action).map(|_| None),
     };
 
     match res {
@@ -46,14 +47,20 @@ fn main() {
 fn evaluate_dump(
     input: PathBuf,
     output: Option<PathBuf>,
+    symbolicate_args: CliSymbolicate,
     dump_action: CliDumpAction,
 ) -> miette::Result<()> {
     let storage = File::open(input).into_diagnostic()?;
 
     if let Some(output) = output {
         let mut file = File::create(output).into_diagnostic()?;
-        nosco_cli::evaluate_dump(storage, &mut file, dump_action)
+        nosco_cli::evaluate_dump(storage, &mut file, symbolicate_args, dump_action)
     } else {
-        nosco_cli::evaluate_dump(storage, &mut std::io::stdout(), dump_action)
+        nosco_cli::evaluate_dump(
+            storage,
+            &mut std::io::stdout(),
+            symbolicate_args,
+            dump_action,
+        )
     }
 }

@@ -1,16 +1,20 @@
 use std::io::{Read, Seek};
+use std::time::SystemTime;
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 use miette::IntoDiagnostic;
 use nosco_storage::content::StateChangeData;
 use nosco_storage::{BacktraceElement, MlaStorageReader};
 
+use super::SymbolResolver;
+
 pub fn dump_to_kdl(
     mut reader: MlaStorageReader<impl Read + Seek>,
     call_info_fetcher: CallInformationFetcher,
     call_id: String,
+    resolver: Option<&mut SymbolResolver>,
 ) -> miette::Result<KdlDocument> {
-    let call_info = call_info_fetcher.fetch(call_id, &mut reader)?;
+    let call_info = call_info_fetcher.fetch(call_id, &mut reader, resolver)?;
 
     let mut kdl = KdlDocument::new();
 
@@ -21,6 +25,8 @@ pub fn dump_to_kdl(
 
 pub(super) struct CallInformation {
     pub call_id: String,
+    #[allow(unused)]
+    pub timestamp: SystemTime,
     pub symbol: Option<String>,
     pub backtrace: Option<Vec<BacktraceElementInformation>>,
     pub thread_id: Option<u64>,
@@ -65,10 +71,12 @@ impl CallInformation {
             if backtrace.is_empty() {
                 bt_node.entries_mut().push(KdlEntry::new("<none>"));
             } else {
-                bt_node
-                    .ensure_children()
-                    .nodes_mut()
-                    .extend(backtrace.iter().rev().map(|bt| bt.dump_to_kdl_node()));
+                bt_node.ensure_children().nodes_mut().extend(
+                    backtrace
+                        .iter()
+                        .rev()
+                        .map(|bt| bt.dump_to_kdl_node(self.address.is_some())),
+                );
             }
 
             kdl_node.ensure_children().nodes_mut().push(bt_node);
@@ -120,9 +128,11 @@ impl CallInformationFetcher {
         self,
         call_id: String,
         reader: &mut MlaStorageReader<'_, impl Read + Seek>,
+        mut resolver: Option<&mut SymbolResolver>,
     ) -> miette::Result<CallInformation> {
+        let (metadata, _) = reader.call_stream_reader(&call_id).into_diagnostic()?;
+
         let (thread_id, address) = if self.fetch_thread_id || self.fetch_address {
-            let (metadata, _) = reader.call_stream_reader(&call_id).into_diagnostic()?;
             (
                 self.fetch_thread_id.then_some(metadata.thread_id),
                 self.fetch_address.then_some(metadata.addr),
@@ -142,11 +152,25 @@ impl CallInformationFetcher {
                 .into_iter()
                 .map(|bt| match bt {
                     BacktraceElement::CallAddr(addr) => {
-                        Ok(BacktraceElementInformation::CallAddr(addr))
+                        let sym = if let Some(resolver) = resolver.as_deref_mut() {
+                            resolver
+                                .resolve_symbol_at_addr(addr, metadata.timestamp)?
+                                .map(|(sym, off)| {
+                                    if off != 0 {
+                                        format!("{sym}+{off:#x}")
+                                    } else {
+                                        sym
+                                    }
+                                })
+                        } else {
+                            None
+                        };
+
+                        Ok(BacktraceElementInformation::CallAddr(addr, sym))
                     }
                     BacktraceElement::CallId(call_id) => CallInformation::fetcher()
                         .with_call_address(self.fetch_address)
-                        .fetch(call_id, reader)
+                        .fetch(call_id, reader, resolver.as_deref_mut())
                         .map(BacktraceElementInformation::CallInfo),
                 })
                 .collect::<miette::Result<Vec<_>>>()
@@ -172,9 +196,24 @@ impl CallInformationFetcher {
             None
         };
 
+        let symbol = if let Some(resolver) = resolver {
+            resolver
+                .resolve_symbol_at_addr(metadata.addr, metadata.timestamp)?
+                .map(|(sym, off)| {
+                    if off != 0 {
+                        format!("{sym}+{off:#x}")
+                    } else {
+                        sym
+                    }
+                })
+        } else {
+            None
+        };
+
         Ok(CallInformation {
             call_id,
-            symbol: None,
+            timestamp: metadata.timestamp,
+            symbol,
             backtrace,
             address,
             thread_id,
@@ -184,15 +223,22 @@ impl CallInformationFetcher {
 }
 
 pub(super) enum BacktraceElementInformation {
-    CallAddr(u64),
+    CallAddr(u64, Option<String>),
     CallInfo(CallInformation),
 }
 
 impl BacktraceElementInformation {
-    pub fn dump_to_kdl_node(&self) -> KdlNode {
+    pub fn dump_to_kdl_node(&self, dump_addr: bool) -> KdlNode {
         match self {
-            BacktraceElementInformation::CallAddr(addr) => KdlNode::new(format!("<{addr:#x}>")),
-            BacktraceElementInformation::CallInfo(call_info) => call_info.dump_to_kdl_node(None),
+            Self::CallAddr(addr, Some(sym)) => {
+                let mut node = KdlNode::new(sym.to_owned());
+                if dump_addr {
+                    node.push(KdlEntry::new_prop("addr", format!("{addr:#x}")));
+                }
+                node
+            }
+            Self::CallAddr(addr, None) => KdlNode::new(format!("<{addr:#x}>")),
+            Self::CallInfo(call_info) => call_info.dump_to_kdl_node(None),
         }
     }
 }

@@ -9,11 +9,13 @@ use miette::IntoDiagnostic;
 use nosco_storage::MlaStorageReader;
 use nosco_storage::content::CallData;
 
+use super::SymbolResolver;
 use super::call_info::{CallInformation, CallInformationFetcher};
 
 pub fn dump_to_kdl(
     mut reader: MlaStorageReader<impl Read + Seek>,
     mut call_info_fetcher: CallInformationFetcher,
+    mut resolver: Option<&mut SymbolResolver>,
     max_depth: Option<usize>,
     asm: bool,
     call_id: String,
@@ -49,7 +51,11 @@ pub fn dump_to_kdl(
         let entry = call_trace_info
             .entry(call_id.clone())
             .insert_entry(CallTraceInformation {
-                call_info: call_info_fetcher.fetch(call_id, &mut reader)?,
+                call_info: call_info_fetcher.fetch(
+                    call_id,
+                    &mut reader,
+                    resolver.as_deref_mut(),
+                )?,
                 call_data_info: Vec::new(),
             });
 

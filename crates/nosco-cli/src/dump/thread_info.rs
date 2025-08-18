@@ -5,16 +5,18 @@ use miette::IntoDiagnostic;
 use nosco_storage::MlaStorageReader;
 use nosco_storage::content::{StateChangeData, StateUpdateOrigin};
 
+use super::SymbolResolver;
 use super::call_info::{CallInformation, CallInformationFetcher};
 
 pub fn dump_to_kdl(
     mut reader: MlaStorageReader<impl Read + Seek>,
     call_info_fetcher: CallInformationFetcher,
+    mut resolver: Option<&mut SymbolResolver>,
     single_thread: Option<u64>,
 ) -> miette::Result<KdlDocument> {
     let threads_info = fetch_partial_threads_info(&mut reader, single_thread)?
         .into_iter()
-        .map(|info| info.fetch_calls_info(&mut reader, call_info_fetcher))
+        .map(|info| info.fetch_calls_info(&mut reader, call_info_fetcher, resolver.as_deref_mut()))
         .collect::<miette::Result<Vec<_>>>()?;
 
     let mut kdl = KdlDocument::new();
@@ -123,6 +125,7 @@ impl PartialThreadInformation {
         self,
         reader: &mut MlaStorageReader<'_, impl Read + Seek>,
         call_info_fetcher: CallInformationFetcher,
+        mut resolver: Option<&mut SymbolResolver>,
     ) -> miette::Result<ThreadInformation> {
         let origin = self
             .origin
@@ -135,7 +138,7 @@ impl PartialThreadInformation {
                     call_id
                         .map(|(call_id, addr)| {
                             call_info_fetcher
-                                .fetch(call_id, reader)
+                                .fetch(call_id, reader, resolver.as_deref_mut())
                                 .map(|mut call_info| {
                                     if let Some(address) = call_info.address.as_mut() {
                                         *address = addr;
@@ -155,7 +158,7 @@ impl PartialThreadInformation {
                 call_id
                     .map(|(call_id, addr)| {
                         call_info_fetcher
-                            .fetch(call_id, reader)
+                            .fetch(call_id, reader, resolver.as_deref_mut())
                             .map(|mut call_info| {
                                 if let Some(address) = call_info.address.as_mut() {
                                     *address = addr;
@@ -171,7 +174,7 @@ impl PartialThreadInformation {
         let root_calls_info = self
             .root_call_ids
             .into_iter()
-            .map(|call_id| call_info_fetcher.fetch(call_id, reader))
+            .map(|call_id| call_info_fetcher.fetch(call_id, reader, resolver.as_deref_mut()))
             .collect::<miette::Result<_>>()?;
 
         Ok(ThreadInformation {
