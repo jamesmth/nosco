@@ -83,8 +83,11 @@ pub fn evaluate_run(
 
         let trace_event_handler = process.into_inner();
 
-        let _ = stdout.await;
-        let _ = stderr.await;
+        if res.is_ok() {
+            // the child stopped in a stable state, it should be safe to wait for stdio completion
+            let _ = stdout.await;
+            let _ = stderr.await;
+        }
 
         trace_event_handler
             .finalize_storage()
