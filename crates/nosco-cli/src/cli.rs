@@ -125,9 +125,9 @@ pub struct CliCallInfo {
 /// Configuration for symbolicating the dump.
 #[derive(clap::Parser, Debug)]
 pub struct CliSymbolicate {
-    /// Whether to symbolicate the dump.
+    /// Whether to skip symbolication.
     #[clap(short, long)]
-    pub symbolicate: bool,
+    pub no_symbols: bool,
 
     /// Root path used by the symbol resolver to find binaries (executable, libraries).
     #[clap(long, value_name = "PATH")]

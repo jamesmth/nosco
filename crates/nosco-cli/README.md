@@ -23,7 +23,7 @@ is a tool that allows you to easily capture and analyze an execution trace of a 
 
 ## Getting started
 
-![Tutorial](https://github.com/user-attachments/assets/1eb5c85f-9b86-4435-bfc0-1fcb8b960847)
+![Tutorial](https://github.com/user-attachments/assets/3aa3c37a-b314-44ff-a11c-d63d663a0e79)
 
 ```sh
 # run a process and capture a full trace (can be very slow, so a maximum call depth is specified)

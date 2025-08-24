@@ -27,7 +27,7 @@ pub fn evaluate_dump(
 ) -> miette::Result<()> {
     let mut reader = MlaStorageReader::from_reader(input).into_diagnostic()?;
 
-    let mut resolver = if symbolicate_args.symbolicate {
+    let mut resolver = if !symbolicate_args.no_symbols {
         Some(SymbolResolver::init(&mut reader, symbolicate_args)?)
     } else {
         None
