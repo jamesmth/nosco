@@ -23,7 +23,7 @@ is a tool that allows you to easily capture and analyze an execution trace of a 
 
 ## Getting started
 
-![Tutorial](https://github.com/user-attachments/assets/d864ceb6-dd6a-4a44-a3d9-fc0d800dd923)
+![Tutorial](https://github.com/user-attachments/assets/1eb5c85f-9b86-4435-bfc0-1fcb8b960847)
 
 ```sh
 # run a process and capture a full trace (can be very slow, so a maximum call depth is specified)
@@ -85,7 +85,7 @@ Here is an overview of the direction this project is heading.
 | CLI command `run` to trace new processes                 | 🔜 (v0.1) | ✅ |
 | CLI command `dump` to inspect trace session files        | 🔜 (v0.1) | ✅ |
 | Tracing backend (**x86** Linux): `ptrace`                | 🔜 (v0.1) | <ul><li>[x] single-thread tracing</li><li>[ ] multi-thread tracing</li><li>[x] 32-bit process tracing</li><li>[x] 64-bit process tracing</li></ul> |
-| CLI command `dump`: symbolication of dumped addresses    | 🔜 (v0.1) |    |
+| CLI command `dump`: symbolication of dumped addresses    | 🔜 (v0.1) | ✅ |
 | Tracing backend (**x86** Windows): `debugapi`            | ❓(TBD)   |    |
 | Tracing backend (**ARM** Linux): `ptrace`                | ❓(TBD)   |    |
 | Tracing backend (**ARM** MacOS): mach ports              | ❓(TBD)   |    |
