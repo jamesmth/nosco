@@ -36,6 +36,9 @@ pub enum CallLevel {
     Sub {
         /// Call ID of the parent function call.
         caller_id: String,
+
+        /// Address of the call instruction in the parent.
+        caller_addr: u64,
     },
 }
 

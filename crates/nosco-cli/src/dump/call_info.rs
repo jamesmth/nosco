@@ -3,7 +3,7 @@ use std::time::SystemTime;
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 use miette::IntoDiagnostic;
-use nosco_storage::content::StateChangeData;
+use nosco_storage::content::{CallMetadata, StateChangeData};
 use nosco_storage::{BacktraceElement, MlaStorageReader};
 
 use super::SymbolResolver;
@@ -124,14 +124,36 @@ impl CallInformationFetcher {
         self
     }
 
+    pub fn fetch_with_addr_in_call(
+        self,
+        call_id: String,
+        addr_in_call: u64,
+        reader: &mut MlaStorageReader<'_, impl Read + Seek>,
+        resolver: Option<&mut SymbolResolver>,
+    ) -> miette::Result<CallInformation> {
+        let (mut metadata, _) = reader.call_stream_reader(&call_id).into_diagnostic()?;
+        metadata.addr = addr_in_call;
+
+        self.fetch_impl(call_id, metadata, reader, resolver)
+    }
+
     pub fn fetch(
         self,
         call_id: String,
         reader: &mut MlaStorageReader<'_, impl Read + Seek>,
-        mut resolver: Option<&mut SymbolResolver>,
+        resolver: Option<&mut SymbolResolver>,
     ) -> miette::Result<CallInformation> {
         let (metadata, _) = reader.call_stream_reader(&call_id).into_diagnostic()?;
+        self.fetch_impl(call_id, metadata, reader, resolver)
+    }
 
+    fn fetch_impl(
+        self,
+        call_id: String,
+        metadata: CallMetadata,
+        reader: &mut MlaStorageReader<'_, impl Read + Seek>,
+        mut resolver: Option<&mut SymbolResolver>,
+    ) -> miette::Result<CallInformation> {
         let (thread_id, address) = if self.fetch_thread_id || self.fetch_address {
             (
                 self.fetch_thread_id.then_some(metadata.thread_id),
@@ -168,9 +190,9 @@ impl CallInformationFetcher {
 
                         Ok(BacktraceElementInformation::CallAddr(addr, sym))
                     }
-                    BacktraceElement::CallId(call_id) => CallInformation::fetcher()
+                    BacktraceElement::CallId(call_id, addr) => CallInformation::fetcher()
                         .with_call_address(self.fetch_address)
-                        .fetch(call_id, reader, resolver.as_deref_mut())
+                        .fetch_with_addr_in_call(call_id, addr, reader, resolver.as_deref_mut())
                         .map(BacktraceElementInformation::CallInfo),
                 })
                 .collect::<miette::Result<Vec<_>>>()

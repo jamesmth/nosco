@@ -295,11 +295,17 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
             .get_mut(&thread_id)
             .ok_or(crate::Error::UnexpectedThreadId(thread_id))?;
 
-        let level = if let Some(CallStream { id, label, .. }) = call_streams.last() {
+        let level = if let Some(CallStream {
+            id,
+            label,
+            latest_addr,
+        }) = call_streams.last()
+        {
             // this is a nested call
 
             let stream_id = *id;
             let stream_label = label.clone();
+            let caller_addr = *latest_addr;
 
             call_streams.push(CallStream {
                 id: new_stream_id,
@@ -316,6 +322,7 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
 
             CallLevel::Sub {
                 caller_id: stream_label,
+                caller_addr,
             }
         } else {
             // this is a root call

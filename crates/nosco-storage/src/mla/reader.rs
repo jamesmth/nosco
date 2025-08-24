@@ -195,8 +195,11 @@ impl<R: Read + Seek> BacktraceReader<'_, '_, R> {
                 }
             };
 
-            let next_call_id = match next_call_metadata.level {
-                CallLevel::Sub { caller_id } => caller_id,
+            let (next_call_id, caller_addr) = match next_call_metadata.level {
+                CallLevel::Sub {
+                    caller_id,
+                    caller_addr,
+                } => (caller_id, caller_addr),
                 CallLevel::Root { backtrace } => {
                     self.next_element = Either::Right(backtrace.into_iter());
                     continue;
@@ -210,7 +213,7 @@ impl<R: Read + Seek> BacktraceReader<'_, '_, R> {
 
             self.next_element = Either::Left(Some(metadata));
 
-            break Ok(Some(BacktraceElement::CallId(next_call_id)));
+            break Ok(Some(BacktraceElement::CallId(next_call_id, caller_addr)));
         }
     }
 }
@@ -229,6 +232,6 @@ pub enum BacktraceElement {
     /// Function call address of the backtrace element.
     CallAddr(u64),
 
-    /// Function call ID of the backtrace element.
-    CallId(String),
+    /// Function call ID (and address) of the backtrace element.
+    CallId(String, u64),
 }

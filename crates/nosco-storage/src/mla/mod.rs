@@ -587,7 +587,7 @@ mod tests {
         assert_eq!(
             backtrace,
             vec![
-                BacktraceElement::CallId(root_call_ids[0].clone()),
+                BacktraceElement::CallId(root_call_ids[0].clone(), 0x0),
                 BacktraceElement::CallAddr(0xa)
             ]
         );
@@ -610,8 +610,8 @@ mod tests {
         assert_eq!(
             backtrace,
             vec![
-                BacktraceElement::CallId(child_call_id_1),
-                BacktraceElement::CallId(root_call_ids[0].clone()),
+                BacktraceElement::CallId(child_call_id_1, 0x1),
+                BacktraceElement::CallId(root_call_ids[0].clone(), 0x0),
                 BacktraceElement::CallAddr(0xa)
             ]
         );
