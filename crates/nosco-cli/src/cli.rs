@@ -55,7 +55,7 @@ pub enum CliAction {
 /// The dump command to run.
 #[derive(clap::Subcommand)]
 pub enum CliDumpAction {
-    /// Dump call information of a specified call.
+    /// Dump call information of a specified call (in KDL format).
     CallInfo {
         /// Configuration for dumping call information.
         #[clap(flatten)]
@@ -65,15 +65,11 @@ pub enum CliDumpAction {
         call_id: String,
     },
 
-    /// Dump call trace starting from the specified call.
+    /// Dump call trace starting from the specified call (in KDL format).
     CallTrace {
         /// Maximum call trace depth to dump.
         #[clap(long)]
         depth: Option<usize>,
-
-        /// Whether to dump executed assembler instructions.
-        #[clap(long)]
-        asm: bool,
 
         /// Configuration for dumping call information.
         #[clap(flatten)]
@@ -83,7 +79,7 @@ pub enum CliDumpAction {
         call_id: String,
     },
 
-    /// Dump binary information.
+    /// Dump binary information (in KDL format).
     BinaryInfo {
         /// Configuration for dumping call information.
         #[clap(flatten)]
@@ -93,7 +89,7 @@ pub enum CliDumpAction {
         binary_name: Option<String>,
     },
 
-    /// Dump thread information.
+    /// Dump thread information (in KDL format).
     ThreadInfo {
         /// Configuration for dumping call information.
         #[clap(flatten)]
@@ -101,6 +97,16 @@ pub enum CliDumpAction {
 
         /// Dump information for a single thread with the given ID.
         thread_id: Option<u64>,
+    },
+
+    /// Dump executed instructions of the specified call (in GAS file format).
+    ExecTrace {
+        /// Dump addresses.
+        #[clap(long)]
+        addresses: bool,
+
+        /// ID of the call.
+        call_id: String,
     },
 }
 

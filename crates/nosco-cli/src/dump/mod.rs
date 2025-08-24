@@ -1,6 +1,7 @@
 mod binary_info;
 mod call_info;
 mod call_trace;
+mod exec_trace;
 mod thread_info;
 
 use std::io::{Read, Seek, Write};
@@ -32,7 +33,7 @@ pub fn evaluate_dump(
         None
     };
 
-    let mut kdl = match dump_action {
+    match dump_action {
         CliDumpAction::CallInfo {
             call_info_args,
             call_id,
@@ -43,7 +44,18 @@ pub fn evaluate_dump(
                 .with_thread_id(true)
                 .with_state_updates(true);
 
-            self::call_info::dump_to_kdl(reader, call_info_fetcher, call_id, resolver.as_mut())?
+            let mut kdl = self::call_info::dump_to_kdl(
+                reader,
+                call_info_fetcher,
+                call_id,
+                resolver.as_mut(),
+            )?;
+
+            kdl.autoformat();
+
+            output
+                .write_all(kdl.to_string().as_bytes())
+                .into_diagnostic()?;
         }
         CliDumpAction::BinaryInfo {
             call_info_args,
@@ -53,16 +65,21 @@ pub fn evaluate_dump(
                 .with_backtrace(call_info_args.backtrace)
                 .with_call_address(call_info_args.addresses);
 
-            self::binary_info::dump_to_kdl(
+            let mut kdl = self::binary_info::dump_to_kdl(
                 reader,
                 call_info_fetcher,
                 binary_name,
                 resolver.as_mut(),
-            )?
+            )?;
+
+            kdl.autoformat();
+
+            output
+                .write_all(kdl.to_string().as_bytes())
+                .into_diagnostic()?;
         }
         CliDumpAction::CallTrace {
             depth,
-            asm,
             call_info_args,
             call_id,
         } => {
@@ -70,14 +87,19 @@ pub fn evaluate_dump(
                 .with_backtrace(call_info_args.backtrace)
                 .with_call_address(call_info_args.addresses);
 
-            self::call_trace::dump_to_kdl(
+            let mut kdl = self::call_trace::dump_to_kdl(
                 reader,
                 call_info_fetcher,
                 resolver.as_mut(),
                 depth,
-                asm,
                 call_id,
-            )?
+            )?;
+
+            kdl.autoformat();
+
+            output
+                .write_all(kdl.to_string().as_bytes())
+                .into_diagnostic()?;
         }
         CliDumpAction::ThreadInfo {
             call_info_args,
@@ -87,15 +109,31 @@ pub fn evaluate_dump(
                 .with_backtrace(call_info_args.backtrace)
                 .with_call_address(call_info_args.addresses);
 
-            self::thread_info::dump_to_kdl(reader, call_info_fetcher, resolver.as_mut(), thread_id)?
+            let mut kdl = self::thread_info::dump_to_kdl(
+                reader,
+                call_info_fetcher,
+                resolver.as_mut(),
+                thread_id,
+            )?;
+
+            kdl.autoformat();
+
+            output
+                .write_all(kdl.to_string().as_bytes())
+                .into_diagnostic()?;
         }
-    };
+        CliDumpAction::ExecTrace { addresses, call_id } => {
+            let call_info_fetcher = CallInformation::fetcher().with_call_address(addresses);
 
-    kdl.autoformat();
-
-    output
-        .write_all(kdl.to_string().as_bytes())
-        .into_diagnostic()?;
+            self::exec_trace::dump_to_gas(
+                reader,
+                output,
+                call_info_fetcher,
+                resolver.as_mut(),
+                call_id,
+            )?;
+        }
+    }
 
     Ok(())
 }

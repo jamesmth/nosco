@@ -38,8 +38,8 @@ nosco dump -i echo.trace thread-info
 # dump a call trace of a particular call
 nosco dump -i echo.trace call-trace --depth 2 <CALL_ID>
 
-# same as before, but also dump all the executed instructions
-nosco dump -i echo.trace call-trace --depth 2 --asm <CALL_ID>
+# dump the executed instructions of a particular call
+nosco dump -i echo.trace exec-trace <CALL_ID>
 
 # dump all the loaded/unloaded libraries/images in a trace session
 nosco dump -i echo.trace binary-info
