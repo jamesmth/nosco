@@ -17,9 +17,13 @@ pub struct Opcodes {
 
 impl Opcodes {
     /// Reads opcodes of a single instruction at the given address.
-    pub fn read_once<S: DebugSession>(session: &S, addr: u64) -> Result<Opcodes, S::Error> {
+    pub fn read_once<S: DebugSession>(
+        session: &S,
+        thread: &S::StoppedThread,
+        addr: u64,
+    ) -> Result<Opcodes, S::Error> {
         let mut opcodes = [0u8; MAX_OPCODES_LEN];
-        session.read_memory(addr, &mut opcodes)?;
+        session.read_memory(thread, addr, &mut opcodes)?;
 
         let ty = if session.binary_ctx().is_big_container {
             if is_call_64(opcodes) {

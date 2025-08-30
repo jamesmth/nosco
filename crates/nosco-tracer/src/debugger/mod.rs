@@ -65,10 +65,20 @@ pub trait DebugSession {
     fn binary_ctx(&self) -> BinaryContext;
 
     /// Reads data from the debuggee's address space.
-    fn read_memory(&self, addr: u64, buf: &mut [u8]) -> Result<(), Self::Error>;
+    fn read_memory(
+        &self,
+        thread: &Self::StoppedThread,
+        addr: u64,
+        buf: &mut [u8],
+    ) -> Result<(), Self::Error>;
 
     /// Writes data to the debuggee's address space.
-    fn write_memory(&self, addr: u64, buf: &[u8]) -> Result<(), Self::Error>;
+    fn write_memory(
+        &self,
+        thread: &Self::StoppedThread,
+        addr: u64,
+        buf: &[u8],
+    ) -> Result<(), Self::Error>;
 
     /// Retrieves registers of the given stopped thread.
     fn get_registers(

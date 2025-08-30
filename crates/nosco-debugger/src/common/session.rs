@@ -205,12 +205,16 @@ impl Session {
         Ok(())
     }
 
-    fn read_addr(&self, addr: u64) -> crate::Result<u64> {
+    fn read_addr(
+        &self,
+        thread: &<Self as DebugSession>::StoppedThread,
+        addr: u64,
+    ) -> crate::Result<u64> {
         let bin_ctx = self.binary_ctx();
 
         if bin_ctx.is_big_container {
             let mut buf = [0u8; 8];
-            self.read_memory(addr, &mut buf)?;
+            self.read_memory(thread, addr, &mut buf)?;
 
             if bin_ctx.is_little_endian {
                 Ok(u64::from_le_bytes(buf))
@@ -219,7 +223,7 @@ impl Session {
             }
         } else {
             let mut buf = [0u8; 4];
-            self.read_memory(addr, &mut buf)?;
+            self.read_memory(thread, addr, &mut buf)?;
 
             if bin_ctx.is_little_endian {
                 Ok(u32::from_le_bytes(buf) as u64)
@@ -335,12 +339,22 @@ impl DebugSession for Session {
         Ok(())
     }
 
-    fn read_memory(&self, addr: u64, buf: &mut [u8]) -> Result<(), Self::Error> {
-        self.inner.read_memory(addr, buf).map_err(Into::into)
+    fn read_memory(
+        &self,
+        thread: &Self::StoppedThread,
+        addr: u64,
+        buf: &mut [u8],
+    ) -> Result<(), Self::Error> {
+        sys::mem::read_process_memory(thread.id(), addr, buf).map_err(Into::into)
     }
 
-    fn write_memory(&self, addr: u64, buf: &[u8]) -> Result<(), Self::Error> {
-        self.inner.write_memory(addr, buf).map_err(Into::into)
+    fn write_memory(
+        &self,
+        thread: &Self::StoppedThread,
+        addr: u64,
+        buf: &[u8],
+    ) -> Result<(), Self::Error> {
+        sys::mem::write_process_memory(thread.id(), addr, buf).map_err(Into::into)
     }
 
     fn get_registers(
@@ -378,7 +392,7 @@ impl DebugSession for Session {
         };
 
         let mut read_stack = |stack_addr| {
-            self.read_addr(stack_addr)
+            self.read_addr(thread, stack_addr)
                 .map_err(|_| tracing::error!(addr = stack_addr, "read memory during unwind"))
         };
 

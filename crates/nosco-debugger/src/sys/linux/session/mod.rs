@@ -164,14 +164,6 @@ impl Session {
         Ok(true)
     }
 
-    pub fn read_memory(&self, addr: u64, buf: &mut [u8]) -> crate::sys::Result<()> {
-        self::mem::read_process_memory(self.debuggee_handle.raw_id(), addr, buf)
-    }
-
-    pub fn write_memory(&self, addr: u64, buf: &[u8]) -> crate::sys::Result<()> {
-        self::mem::write_process_memory(self.debuggee_handle.raw_id(), addr, buf)
-    }
-
     /// Returns the binary context (size, endianness) of the debuggee.
     pub fn binary_ctx(&self) -> goblin::container::Ctx {
         self.elf_ctx

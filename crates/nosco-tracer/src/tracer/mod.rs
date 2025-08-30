@@ -222,8 +222,8 @@ where
         };
 
         if switch_to_singlestep {
-            let cur_instr =
-                Opcodes::read_once(&self.session, thread.instr_addr()).map_err(DebuggerError)?;
+            let cur_instr = Opcodes::read_once(&self.session, thread, thread.instr_addr())
+                .map_err(DebuggerError)?;
 
             prev_instr.insert((thread.instr_addr(), cur_instr));
 
@@ -238,8 +238,8 @@ where
         thread: &mut S::StoppedThread,
         mut prev_instr: OccupiedEntry<'_, u64, (u64, Opcodes)>,
     ) -> crate::Result<(), S::Error, H::Error> {
-        let cur_instr =
-            Opcodes::read_once(&self.session, thread.instr_addr()).map_err(DebuggerError)?;
+        let cur_instr = Opcodes::read_once(&self.session, thread, thread.instr_addr())
+            .map_err(DebuggerError)?;
 
         let (exec_addr, exec_instr) =
             std::mem::replace(prev_instr.get_mut(), (thread.instr_addr(), cur_instr));
@@ -368,8 +368,9 @@ where
                         if !max_depth_exceeded {
                             // enable single-step
 
-                            let cur_instr = Opcodes::read_once(&self.session, thread.instr_addr())
-                                .map_err(DebuggerError)?;
+                            let cur_instr =
+                                Opcodes::read_once(&self.session, &thread, thread.instr_addr())
+                                    .map_err(DebuggerError)?;
 
                             prev_instrs.insert(thread.id(), (thread.instr_addr(), cur_instr));
 
@@ -418,7 +419,7 @@ where
             ThreadRegisters::X86(regs) => {
                 let mut buf = [0u8; 4];
                 self.session
-                    .read_memory(regs.esp() as u64, &mut buf)
+                    .read_memory(thread, regs.esp() as u64, &mut buf)
                     .map_err(DebuggerError)?;
 
                 if self.session.binary_ctx().is_little_endian {
@@ -430,7 +431,7 @@ where
             ThreadRegisters::X86_64(regs) => {
                 let mut buf = [0u8; 8];
                 self.session
-                    .read_memory(regs.rsp(), &mut buf)
+                    .read_memory(thread, regs.rsp(), &mut buf)
                     .map_err(DebuggerError)?;
 
                 if self.session.binary_ctx().is_little_endian {
