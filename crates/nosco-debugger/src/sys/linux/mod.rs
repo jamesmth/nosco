@@ -12,12 +12,15 @@ use nix::fcntl::OFlag;
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
 use nix::unistd::{ForkResult, chdir, dup2, execvp, fork, pipe2};
+use nosco_symbol::elf::MappedElf;
 use nosco_tracer::Command;
 use nosco_tracer::tracer::TracedProcessStdio;
 
 pub use self::error::{Error, Result};
 use self::process::TracedProcessHandle;
 pub use self::session::Session;
+
+pub type MappedBinary = MappedElf;
 
 /// Spawns a new child process.
 ///

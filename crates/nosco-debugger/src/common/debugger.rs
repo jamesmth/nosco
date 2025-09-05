@@ -1,7 +1,8 @@
 use nosco_tracer::Command;
-use nosco_tracer::tracer::TracedProcessStdio;
+use nosco_tracer::debugger::SpawnedTracedProcess;
 
 use super::session::Session;
+use super::thread::ThreadManager;
 use crate::sys;
 
 /// Default debugger (local debugging) implementation.
@@ -26,11 +27,32 @@ impl nosco_tracer::debugger::Debugger for Debugger {
     async fn spawn(
         &mut self,
         command: Command,
-    ) -> Result<(Self::Session, TracedProcessStdio), Self::Error> {
+    ) -> Result<SpawnedTracedProcess<Self::Session>, Self::Error> {
         let (debuggee_handle, debuggee_stdio) = sys::spawn_debuggee(command).await?;
 
-        let session = Session::init(debuggee_handle, &[]).await?;
+        //
+        // Handle all threads already created by the debuggee.
+        //
 
-        Ok((session, debuggee_stdio))
+        let mut thread_manager = ThreadManager::new();
+
+        let regs = sys::thread::get_thread_registers(debuggee_handle.raw_id())?;
+
+        let mut thread = thread_manager.register_thread_create(debuggee_handle.raw_id());
+        thread.instr_addr = regs.instr_addr();
+
+        let (debug_session, loaded_binaries) =
+            Session::from_suspended_process(debuggee_handle, &[], thread_manager).await?;
+
+        //
+        // Handle all binaries already loaded by the debuggee.
+        //
+
+        Ok(SpawnedTracedProcess {
+            debug_session,
+            loaded_binaries,
+            spawned_threads: vec![thread],
+            stdio: debuggee_stdio,
+        })
     }
 }

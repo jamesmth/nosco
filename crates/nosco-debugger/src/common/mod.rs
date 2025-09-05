@@ -14,6 +14,7 @@ pub enum DebugStop {
     #[allow(dead_code)] // to be used when multithreading is supported
     ThreadCreated {
         thread_id: u64,
+        new_thread_id: u64,
     },
 
     ThreadExited {

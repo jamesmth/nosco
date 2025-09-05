@@ -48,6 +48,7 @@ impl ScopedTraceState {
     pub async fn register_mapped_binary<S: DebugSession, H: EventHandler>(
         &mut self,
         session: &mut S,
+        thread: &S::StoppedThread,
         mut binary: S::MappedBinary,
     ) -> crate::Result<(), S::Error, H::Error> {
         let Some(unresolved) = self.traced_functions_unresolved.get(binary.file_name()) else {
@@ -72,7 +73,9 @@ impl ScopedTraceState {
                 self.traced_functions_depth.insert(addr, *trace_depth);
                 resolved_addrs.push(addr);
 
-                session.add_breakpoint(None, addr).map_err(DebuggerError)?;
+                session
+                    .add_breakpoint(thread, true, addr)
+                    .map_err(DebuggerError)?;
 
                 crate::Result::Ok(())
             }
@@ -90,6 +93,7 @@ impl ScopedTraceState {
     pub fn register_unmapped_binary<S: DebugSession, H: EventHandler>(
         &mut self,
         session: &mut S,
+        thread: &S::StoppedThread,
         binary_addr: BinaryAddr,
     ) -> crate::Result<(), S::Error, H::Error> {
         let Some(addrs) = self.traced_functions.remove(&binary_addr) else {
@@ -99,7 +103,7 @@ impl ScopedTraceState {
         for addr in addrs {
             self.traced_functions_depth.remove(&addr);
             session
-                .remove_breakpoint(None, addr)
+                .remove_breakpoint(thread, true, addr)
                 .map_err(DebuggerError)?;
         }
 

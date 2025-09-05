@@ -26,6 +26,10 @@ pub enum Error<E1, E2> {
     /// The tracee was previously resumed.
     #[error("Tracee previously resumed")]
     TraceeAlreadyResumed,
+
+    /// The tracee has no thread.
+    #[error("Tracee has no thread")]
+    TraceeWithoutThread,
 }
 
 /// Result type of this crate.

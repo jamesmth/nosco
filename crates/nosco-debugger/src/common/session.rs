@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use framehop::{FrameAddress, MayAllocateDuringUnwind, Unwinder};
 use nosco_symbol::elf::MappedElf;
 use nosco_tracer::debugger::{BinaryContext, Thread, ThreadRegisters};
@@ -13,21 +11,18 @@ use crate::sys;
 use crate::sys::process::TracedProcessHandle;
 
 #[cfg(target_arch = "x86_64")]
-type StackUnwinder = framehop::x86_64::UnwinderX86_64<Vec<u8>, MayAllocateDuringUnwind>;
+pub type StackUnwinder = framehop::x86_64::UnwinderX86_64<Vec<u8>, MayAllocateDuringUnwind>;
 #[cfg(target_arch = "aarch64")]
-type StackUnwinder = framehop::aarch64::UnwinderAarch64<Vec<u8>, MayAllocateDuringUnwind>;
+pub type StackUnwinder = framehop::aarch64::UnwinderAarch64<Vec<u8>, MayAllocateDuringUnwind>;
 
 #[cfg(target_arch = "x86_64")]
-type StackUnwinderCache = framehop::x86_64::CacheX86_64<MayAllocateDuringUnwind>;
+pub type StackUnwinderCache = framehop::x86_64::CacheX86_64<MayAllocateDuringUnwind>;
 #[cfg(target_arch = "aarch64")]
-type StackUnwinderCache = framehop::aarch64::CacheAarch64<MayAllocateDuringUnwind>;
+pub type StackUnwinderCache = framehop::aarch64::CacheAarch64<MayAllocateDuringUnwind>;
 
 /// Debugging session created by [Debugger](crate::Debugger).
 pub struct Session {
     inner: sys::Session,
-
-    /// Events that happened within the debuggee, but where not waited for yet.
-    debug_events: VecDeque<DebugEvent<Self>>,
 
     /// Breakpoint manager.
     breakpoint_manager: BreakpointManager,
@@ -41,56 +36,37 @@ pub struct Session {
 
 impl Session {
     #[tracing::instrument(name = "DebugSessionInit", skip_all)]
-    pub(super) async fn init(
+    pub(super) async fn from_suspended_process(
         debuggee_handle: TracedProcessHandle,
         other_thread_ids: &[u64],
-    ) -> crate::Result<Self> {
-        let mut breakpoint_manager = BreakpointManager::new(debuggee_handle.raw_id());
+        thread_manager: ThreadManager,
+    ) -> crate::Result<(Self, Vec<sys::MappedBinary>)> {
+        let mut breakpoint_manager = BreakpointManager::new();
 
-        let mut debug_events = VecDeque::new();
-
-        let mut unwinder = StackUnwinder::new();
-
-        let main_thread_id = debuggee_handle.raw_id();
-
-        let session = sys::Session::init(
+        let (debug_session, mut loaded_binaries) = sys::Session::from_suspended_process(
             debuggee_handle,
             other_thread_ids,
-            SessionCx {
-                breakpoint_manager: &mut breakpoint_manager,
-                debug_events: &mut debug_events,
-                unwinder: &mut unwinder,
-                stopped_thread_id: None,
-            },
+            &mut breakpoint_manager,
         )
         .await?;
 
-        //
-        // Handle all the threads already created by the debuggee.
-        //
+        let mut unwinder = StackUnwinder::new();
 
-        let mut thread_manager = ThreadManager::new();
-
-        for thread_id in Some(main_thread_id)
-            .into_iter()
-            .chain(other_thread_ids.iter().copied())
-        {
-            let regs = get_thread_registers(thread_id)?;
-
-            let mut thread = thread_manager.register_thread_create(thread_id);
-            thread.instr_addr = regs.instr_addr();
-
-            let event = DebugEvent::StateInit(DebugStateChange::ThreadCreated(thread));
-            debug_events.push_back(event);
+        for binary in loaded_binaries.iter_mut() {
+            match binary.to_unwind_module().await {
+                Ok(unwind_module) => unwinder.add_module(unwind_module),
+                Err(e) => tracing::warn!(error = %e),
+            }
         }
 
-        Ok(Self {
-            inner: session,
-            debug_events,
+        let debug_session = Self {
+            inner: debug_session,
             breakpoint_manager,
             thread_manager,
             unwinder,
-        })
+        };
+
+        Ok((debug_session, loaded_binaries))
     }
 
     /// Handles the case where a thread was stopped by some exception.
@@ -102,29 +78,25 @@ impl Session {
         &mut self,
         thread_id: u64,
         exception: sys::Exception,
-    ) -> crate::Result<()> {
+    ) -> crate::Result<Option<DebugEvent<Self>>> {
         if !exception.is_breakpoint_or_singlestep() {
             let thread = self
                 .thread_manager
                 .register_thread_stop(thread_id, Some(ThreadStopReason::Exception(exception)))
                 .ok_or(crate::Error::UntrackedThread(thread_id))?;
 
-            return self.resume(thread);
+            self.resume(thread)?;
+
+            return Ok(None);
         }
 
         //
         // handle (potential) hardware watchpoint
         //
 
-        let handled_hardware_watchpoint = self.inner.handle_internal_watchpoint(
-            thread_id,
-            SessionCx {
-                breakpoint_manager: &mut self.breakpoint_manager,
-                debug_events: &mut self.debug_events,
-                unwinder: &mut self.unwinder,
-                stopped_thread_id: Some(thread_id),
-            },
-        )?;
+        let handled_hardware_watchpoint = self
+            .inner
+            .handle_internal_watchpoint(thread_id, &mut self.breakpoint_manager)?;
 
         if handled_hardware_watchpoint {
             let thread = self
@@ -132,7 +104,9 @@ impl Session {
                 .register_thread_stop(thread_id, None)
                 .ok_or(crate::Error::UntrackedThread(thread_id))?;
 
-            return self.resume(thread);
+            self.resume(thread)?;
+
+            return Ok(None);
         }
 
         // retrieve the associated breakpoint (if enabled)
@@ -152,7 +126,7 @@ impl Session {
             )
             .ok_or(crate::Error::UntrackedThread(thread_id))?;
 
-        match thread.stopped_by.as_ref() {
+        let debug_event = match thread.stopped_by.as_ref() {
             // the thread has triggered a breakpoint
             Some(ThreadStopReason::Breakpoint(breakpoint, is_breakpoint_of_thread)) => {
                 // rewind the instruction pointer
@@ -160,49 +134,55 @@ impl Session {
                 regs.assign_to_thread(self, &thread)?;
 
                 // handle (possible) internal breakpoint of debugger
-                self.inner
-                    .handle_internal_breakpoint(
-                        breakpoint.addr,
-                        SessionCx {
-                            breakpoint_manager: &mut self.breakpoint_manager,
-                            debug_events: &mut self.debug_events,
-                            unwinder: &mut self.unwinder,
-                            stopped_thread_id: Some(thread_id),
-                        },
-                    )
+                let changes = self
+                    .inner
+                    .handle_internal_breakpoint(breakpoint.addr, &mut self.unwinder)
                     .await?;
 
                 if *is_breakpoint_of_thread {
                     thread.instr_addr = breakpoint.addr;
 
                     // we don't want the tracer to see the trap instruction
-                    breakpoint.disable()?;
+                    breakpoint.disable(thread.id())?;
 
-                    self.debug_events.push_back(DebugEvent::Breakpoint(thread));
+                    Some(DebugEvent::Breakpoint { thread, changes })
+                } else if thread.single_step {
+                    thread.instr_addr = regs.instr_addr();
+
+                    Some(DebugEvent::Singlestep { thread, changes })
+                } else if let Some(changes) = changes {
+                    Some(DebugEvent::StateUpdate { thread, changes })
                 } else {
                     self.resume(thread)?;
+                    None
                 }
             }
             // the thread has single-stepped over some breakpoint and needs to
             // be resumed (silently)
             None if !thread.single_step && thread.stepped_over.is_some() => {
                 self.resume(thread)?;
+                None
             }
             // the thread has most likely single-stepped
             None if thread.single_step => {
                 thread.instr_addr = regs.instr_addr();
-                self.debug_events.push_back(DebugEvent::Singlestep(thread));
+                Some(DebugEvent::Singlestep {
+                    thread,
+                    changes: None,
+                })
             }
             None => {
                 thread.stopped_by = Some(ThreadStopReason::Exception(exception));
                 self.resume(thread)?;
+                None
             }
             Some(ThreadStopReason::Exception(_)) => {
                 self.resume(thread)?;
+                None
             }
-        }
+        };
 
-        Ok(())
+        Ok(debug_event)
     }
 
     fn read_addr(
@@ -250,48 +230,54 @@ impl DebugSession for Session {
     #[tracing::instrument(name = "DebugEventLoop", skip_all)]
     async fn wait_event(&mut self) -> Result<DebugEvent<Self>, Self::Error> {
         loop {
-            if let Some(event) = self.debug_events.pop_front() {
-                break Ok(event);
-            }
-
             match self.inner.wait_for_debug_stop().await? {
                 DebugStop::Exception {
                     thread_id,
                     exception,
                 } => {
-                    self.handle_exception(thread_id, exception).await?;
+                    if let Some(event) = self.handle_exception(thread_id, exception).await? {
+                        break Ok(event);
+                    } else {
+                        continue;
+                    }
                 }
-                DebugStop::ThreadCreated { thread_id } => {
-                    let regs = get_thread_registers(thread_id)?;
+                DebugStop::ThreadCreated {
+                    thread_id,
+                    new_thread_id,
+                } => {
+                    let mut thread = self
+                        .thread_manager
+                        .register_thread_stop(thread_id, None)
+                        .ok_or(crate::Error::UntrackedThread(thread_id))?;
+                    thread.instr_addr = get_thread_registers(thread_id)?.instr_addr();
 
-                    let mut thread = self.thread_manager.register_thread_create(thread_id);
-                    thread.instr_addr = regs.instr_addr();
+                    let mut new_thread = self.thread_manager.register_thread_create(new_thread_id);
+                    new_thread.instr_addr = get_thread_registers(new_thread_id)?.instr_addr();
 
-                    self.debug_events.push_back(DebugEvent::StateUpdate {
-                        thread_id,
-                        change: DebugStateChange::ThreadCreated(thread),
+                    break Ok(DebugEvent::StateUpdate {
+                        thread,
+                        changes: vec![DebugStateChange::ThreadCreated(new_thread)],
                     });
                 }
                 DebugStop::ThreadExited {
                     thread_id,
                     exit_code,
                 } => {
-                    let thread = self
+                    let mut thread = self
                         .thread_manager
                         .register_thread_stop(thread_id, None)
                         .ok_or(crate::Error::UntrackedThread(thread_id))?;
-
-                    self.resume(thread)?;
+                    thread.instr_addr = get_thread_registers(thread_id)?.instr_addr();
 
                     self.thread_manager.register_thread_exit(thread_id);
 
-                    self.debug_events.push_back(DebugEvent::StateUpdate {
-                        thread_id,
-                        change: DebugStateChange::ThreadExited { exit_code },
+                    break Ok(DebugEvent::StateUpdate {
+                        thread,
+                        changes: vec![DebugStateChange::ThreadExited { exit_code }],
                     });
                 }
                 DebugStop::Exited(status) => {
-                    self.debug_events.push_back(DebugEvent::Exited(status));
+                    break Ok(DebugEvent::Exited(status));
                 }
             }
         }
@@ -311,30 +297,34 @@ impl DebugSession for Session {
         }
     }
 
-    fn add_breakpoint<'a>(
-        &'a mut self,
-        thread: impl Into<Option<&'a Self::StoppedThread>>,
+    fn add_breakpoint(
+        &mut self,
+        thread: &Self::StoppedThread,
+        all_threads: bool,
         addr: u64,
     ) -> Result<(), Self::Error> {
+        let process_id = thread.id();
         self.breakpoint_manager
-            .add_breakpoint_or_increment_usage(addr)?;
+            .add_breakpoint_or_increment_usage(process_id, addr)?;
 
         self.thread_manager
-            .register_add_breakpoint(thread.into().map(|th| th.id()), addr);
+            .register_add_breakpoint((!all_threads).then_some(thread.id()), addr);
 
         Ok(())
     }
 
-    fn remove_breakpoint<'a>(
-        &'a mut self,
-        thread: impl Into<Option<&'a Self::StoppedThread>>,
+    fn remove_breakpoint(
+        &mut self,
+        thread: &Self::StoppedThread,
+        all_threads: bool,
         addr: u64,
     ) -> Result<(), Self::Error> {
+        let process_id = thread.id();
         self.breakpoint_manager
-            .remove_breakpoint_or_decrement_usage(addr);
+            .remove_breakpoint_or_decrement_usage(process_id, addr);
 
         self.thread_manager
-            .register_remove_breakpoint(thread.into().map(|th| th.id()), addr);
+            .register_remove_breakpoint((!all_threads).then_some(thread.id()), addr);
 
         Ok(())
     }
@@ -418,19 +408,18 @@ impl DebugSession for Session {
     fn resume(&mut self, thread: Self::StoppedThread) -> Result<(), Self::Error> {
         let mut resume_by_single_step = thread.single_step;
 
-        if let Some(breakpoint) = thread.stepped_over.as_ref() {
-            breakpoint.enable()?;
-        }
-
-        if let Some(ThreadStopReason::Breakpoint(breakpoint, _)) = thread.stopped_by.as_ref() {
-            breakpoint.disable()?;
-            resume_by_single_step = true;
-        }
-
         let thread_id = thread.id();
 
+        if let Some(breakpoint) = thread.stepped_over.as_ref() {
+            breakpoint.enable(thread_id)?;
+        }
+
         let (stepping_over, exception) = match thread.stopped_by {
-            Some(ThreadStopReason::Breakpoint(breakpoint, _)) => (Some(breakpoint), None),
+            Some(ThreadStopReason::Breakpoint(breakpoint, _)) => {
+                breakpoint.disable(thread_id)?;
+                resume_by_single_step = true;
+                (Some(breakpoint), None)
+            }
             Some(ThreadStopReason::Exception(exception)) => (None, Some(exception)),
             None => (None, None),
         };
@@ -441,52 +430,6 @@ impl DebugSession for Session {
             .register_thread_resume(thread_id, thread.single_step, stepping_over);
 
         Ok(())
-    }
-}
-
-pub struct SessionCx<'a> {
-    breakpoint_manager: &'a mut BreakpointManager,
-    debug_events: &'a mut VecDeque<DebugEvent<Session>>,
-    unwinder: &'a mut StackUnwinder,
-    stopped_thread_id: Option<u64>,
-}
-
-impl SessionCx<'_> {
-    pub fn add_internal_breakpoint(&mut self, addr: u64) -> sys::Result<()> {
-        self.breakpoint_manager
-            .add_breakpoint_or_increment_usage(addr)
-            .map(|_| ())
-    }
-
-    pub async fn on_binary_loaded(
-        &mut self,
-        binary: MappedElf,
-        unwind_module: Option<framehop::Module<Vec<u8>>>,
-    ) {
-        if let Some(module) = unwind_module {
-            self.unwinder.add_module(module);
-        };
-
-        let change = DebugStateChange::BinaryLoaded(binary);
-
-        let event = if let Some(thread_id) = self.stopped_thread_id {
-            DebugEvent::StateUpdate { thread_id, change }
-        } else {
-            DebugEvent::StateInit(change)
-        };
-
-        self.debug_events.push_back(event);
-    }
-
-    pub fn on_binary_unloaded(&mut self, addr: u64) {
-        self.unwinder.remove_module(addr);
-
-        if let Some(thread_id) = self.stopped_thread_id {
-            self.debug_events.push_back(DebugEvent::StateUpdate {
-                thread_id,
-                change: DebugStateChange::BinaryUnloaded { addr },
-            });
-        };
     }
 }
 

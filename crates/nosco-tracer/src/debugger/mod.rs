@@ -22,7 +22,7 @@ pub trait Debugger {
     fn spawn(
         &mut self,
         command: Command,
-    ) -> impl Future<Output = Result<(Self::Session, TracedProcessStdio), Self::Error>>;
+    ) -> impl Future<Output = Result<SpawnedTracedProcess<Self::Session>, Self::Error>>;
 }
 
 /// Trait implementing the instrumentation logic of a debugger.
@@ -99,28 +99,29 @@ pub trait DebugSession {
 
     /// Adds a breakpoint at the given address of the debuggee's address space,
     ///
-    /// If `thread` is specified, the breakpoint is added for a **single
-    /// thread only**.
+    /// If `all_threads` is `true`, the breakpoint is added for all the current
+    /// threads in the debuggee. Otherwise, it is added for `thread` only.
     ///
     /// # Note
     ///
-    /// If `thread` is specified and the breakpoint is triggered by another
+    /// If `all_threads` is `false` and the breakpoint is triggered by another
     /// thread, the implementor makes sure that it is silently resumed
     /// (e.g., not reported by a call to `wait_event`).
-    fn add_breakpoint<'a>(
-        &'a mut self,
-        thread: impl Into<Option<&'a Self::StoppedThread>>,
+    fn add_breakpoint(
+        &mut self,
+        thread: &Self::StoppedThread,
+        all_threads: bool,
         addr: u64,
     ) -> Result<(), Self::Error>;
 
     /// Removes a breakpoint from the given address of the debuggee's address
     /// space.
     ///
-    /// If `thread` is specified, the breakpoint is removed for a **single
-    /// thread only**.
-    fn remove_breakpoint<'a>(
-        &'a mut self,
-        thread: impl Into<Option<&'a Self::StoppedThread>>,
+    /// If `all_threads` is `false`, the breakpoint is removed for `thread` only.
+    fn remove_breakpoint(
+        &mut self,
+        thread: &Self::StoppedThread,
+        all_threads: bool,
         addr: u64,
     ) -> Result<(), Self::Error>;
 
@@ -133,24 +134,50 @@ pub trait DebugSession {
     fn resume(&mut self, thread: Self::StoppedThread) -> Result<(), Self::Error>;
 }
 
+/// Traced process spawned in a suspended state.
+pub struct SpawnedTracedProcess<S: DebugSession> {
+    /// Debugging session over the traced process.
+    pub debug_session: S,
+
+    /// Loaded binaries in the traced process.
+    pub loaded_binaries: Vec<S::MappedBinary>,
+
+    /// Threads spawned in the traced process.
+    ///
+    /// The main thread is at index 0 of the vector.
+    pub spawned_threads: Vec<S::StoppedThread>,
+
+    /// Standard I/O stream for the traced process.
+    pub stdio: TracedProcessStdio,
+}
+
 /// Event describing some action taking place within the debuggee.
 pub enum DebugEvent<S: DebugSession + ?Sized> {
     /// A thread has stopped by triggering a breakpoint.
-    Breakpoint(S::StoppedThread),
+    Breakpoint {
+        /// Thread (stopped) that triggered the breakpoint.
+        thread: S::StoppedThread,
+
+        /// The changes that occurred within the debuggee.
+        changes: Option<Vec<DebugStateChange<S>>>,
+    },
 
     /// A thread has stopped by single-stepping.
-    Singlestep(S::StoppedThread),
+    Singlestep {
+        /// Thread (stopped) that single-stepped.
+        thread: S::StoppedThread,
 
-    /// The debugger detected some initial state within the debuggee.
-    StateInit(DebugStateChange<S>),
+        /// The changes that occurred within the debuggee.
+        changes: Option<Vec<DebugStateChange<S>>>,
+    },
 
     /// The debugger detected some state change within the debuggee.
     StateUpdate {
-        /// ID of the thread responsible for the change.
-        thread_id: u64,
+        /// Thread (stopped) responsible for the change.
+        thread: S::StoppedThread,
 
-        /// The change that occurred within the debuggee.
-        change: DebugStateChange<S>,
+        /// The changes that occurred within the debuggee.
+        changes: Vec<DebugStateChange<S>>,
     },
 
     /// The debuggee has exited.
