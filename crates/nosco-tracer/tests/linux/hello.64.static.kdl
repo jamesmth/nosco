@@ -1,11 +1,11 @@
 start {
     binaries {
-        - <exe>
-        - linux-vdso.so.1
+        <exe>
+        linux-vdso.so.1
     }
 }
 
-trace {
+thread 1 {
     call main {
         <0x0> "lea rdi, [rip + <imm>]"
         <0x7> "call <imm>"

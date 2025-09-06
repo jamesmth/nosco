@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use kdl::{KdlDocument, KdlNode};
-use nosco_tracer::debugger::MappedBinary;
+use nosco_tracer::debugger::{MappedBinary, Thread};
 use regex::Regex;
 
 type MappedBin = <nosco_debugger::Session as nosco_tracer::debugger::DebugSession>::MappedBinary;
@@ -13,14 +13,16 @@ pub struct TestTraceHandler {
     mapped_exe: Option<MappedBin>,
     disass: capstone::Capstone,
     exe_name: String,
-    last_fn_addr: Vec<u64>,
+    last_fn_addrs: HashMap<u64, Vec<u64>>,
     mapped_images: HashMap<u64, String>,
     backtrace_depth: Option<usize>,
 
     regex_imm: Regex,
 
     kdl_node_binaries: KdlNode,
-    kdl_node_calls: Vec<KdlNode>,
+    kdl_node_calls: HashMap<u64, Vec<KdlNode>>,
+
+    next_thread_idx: u64,
 }
 
 impl TestTraceHandler {
@@ -37,16 +39,17 @@ impl TestTraceHandler {
             mapped_exe: None,
             disass: capstone::Capstone::new().x86().mode(mode).build().unwrap(),
             exe_name,
-            last_fn_addr: Vec::new(),
+            last_fn_addrs: HashMap::new(),
             mapped_images: HashMap::new(),
             backtrace_depth,
-            regex_imm: Regex::new("0x[0-9a-fA-F]+").unwrap(),
+            regex_imm: Regex::new("0x[0-9a-fA-F]{2}[0-9a-fA-F]*").unwrap(),
             kdl_node_binaries: KdlNode::new("binaries"),
-            kdl_node_calls: vec![KdlNode::new("trace")],
+            kdl_node_calls: HashMap::new(),
+            next_thread_idx: 1,
         }
     }
 
-    pub fn into_kdl(mut self) -> KdlDocument {
+    pub fn into_kdl(self) -> KdlDocument {
         let mut kdl = KdlDocument::new();
 
         let mut node = KdlNode::new("start");
@@ -55,7 +58,19 @@ impl TestTraceHandler {
             .push(self.kdl_node_binaries);
         kdl.nodes_mut().push(node);
 
-        kdl.nodes_mut().push(self.kdl_node_calls.pop().unwrap());
+        let mut threads_nodes = self
+            .kdl_node_calls
+            .into_values()
+            .map(|mut nodes| nodes.pop().unwrap())
+            .collect::<Vec<_>>();
+
+        threads_nodes.sort_by(|node1, node2| {
+            let thread_1_id = node1.entry(0).unwrap().value().as_integer().unwrap();
+            let thread_2_id = node2.entry(0).unwrap().value().as_integer().unwrap();
+            thread_1_id.cmp(&thread_2_id)
+        });
+
+        kdl.nodes_mut().extend(threads_nodes);
 
         kdl
     }
@@ -78,19 +93,20 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
             binary.file_name()
         };
 
-        if thread_id.is_some() {
+        if let Some(thread_id) = thread_id {
             let mut node = KdlNode::new("load_binary");
             node.entries_mut().push(binary_name.into());
 
             self.kdl_node_calls
+                .get_mut(&thread_id)
+                .unwrap()
                 .last_mut()
                 .unwrap()
                 .ensure_children()
                 .nodes_mut()
                 .push(node);
         } else {
-            let mut node = KdlNode::new("-");
-            node.entries_mut().push(binary_name.into());
+            let node = KdlNode::new(binary_name);
 
             self.kdl_node_binaries
                 .ensure_children()
@@ -107,7 +123,7 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
     async fn binary_unloaded(
         &mut self,
         _session: &mut Self::Session,
-        _thread_id: u64,
+        thread_id: u64,
         unload_addr: u64,
     ) -> Result<(), Self::Error> {
         let Some(binary_name) = self.mapped_images.remove(&unload_addr) else {
@@ -118,6 +134,8 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         node.entries_mut().push(binary_name.into());
 
         self.kdl_node_calls
+            .get_mut(&thread_id)
+            .unwrap()
             .last_mut()
             .unwrap()
             .ensure_children()
@@ -135,7 +153,10 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         use nosco_tracer::debugger::DebugSession;
         use nosco_tracer::debugger::Thread;
 
-        self.last_fn_addr.push(thread.instr_addr());
+        self.last_fn_addrs
+            .get_mut(&thread.id())
+            .unwrap()
+            .push(thread.instr_addr());
 
         let symbol = self
             .mapped_exe
@@ -179,7 +200,10 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
             node.ensure_children().nodes_mut().push(bt_node);
         }
 
-        self.kdl_node_calls.push(node);
+        self.kdl_node_calls
+            .get_mut(&thread.id())
+            .unwrap()
+            .push(node);
 
         Ok(())
     }
@@ -187,17 +211,19 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
     async fn function_returned(
         &mut self,
         _session: &mut Self::Session,
-        _thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
+        thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
     ) -> Result<(), Self::Error> {
-        let node = self.kdl_node_calls.pop().unwrap();
-        self.kdl_node_calls
+        let kdl_node_calls = self.kdl_node_calls.get_mut(&thread.id()).unwrap();
+
+        let node = kdl_node_calls.pop().unwrap();
+        kdl_node_calls
             .last_mut()
             .unwrap()
             .ensure_children()
             .nodes_mut()
             .push(node);
 
-        self.last_fn_addr.pop();
+        self.last_fn_addrs.get_mut(&thread.id()).unwrap().pop();
 
         Ok(())
     }
@@ -205,7 +231,7 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
     async fn instruction_executed(
         &mut self,
         _session: &mut Self::Session,
-        _thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
+        thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
         opcodes_addr: u64,
         opcodes: Vec<u8>,
     ) -> Result<(), Self::Error> {
@@ -233,13 +259,22 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
             ins_pretty
         };
 
-        let offset = opcodes_addr - self.last_fn_addr.last().unwrap();
+        let offset = opcodes_addr
+            - self
+                .last_fn_addrs
+                .get(&thread.id())
+                .unwrap()
+                .last()
+                .unwrap();
+
         let disass = self.regex_imm.replace_all(disass.trim(), "<imm>");
 
         let mut node = KdlNode::new(format!("<{offset:#x}>"));
         node.entries_mut().push(disass.as_ref().into());
 
         self.kdl_node_calls
+            .get_mut(&thread.id())
+            .unwrap()
             .last_mut()
             .unwrap()
             .ensure_children()
@@ -249,15 +284,64 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         Ok(())
     }
 
+    async fn thread_created(
+        &mut self,
+        _session: &mut Self::Session,
+        parent_thread_id: Option<u64>,
+        new_thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
+    ) -> Result<(), Self::Error> {
+        let thread_idx = self.next_thread_idx;
+        self.next_thread_idx += 1;
+
+        if let Some(parent_thread_id) = parent_thread_id {
+            let mut node = KdlNode::new("create_thread");
+            node.entries_mut().push(i128::from(thread_idx).into());
+
+            self.kdl_node_calls
+                .get_mut(&parent_thread_id)
+                .unwrap()
+                .last_mut()
+                .unwrap()
+                .ensure_children()
+                .nodes_mut()
+                .push(node);
+        }
+
+        assert!(
+            self.kdl_node_calls
+                .insert(new_thread.id(), Vec::new())
+                .is_none()
+        );
+
+        let mut node = KdlNode::new("thread");
+        node.entries_mut().push(i128::from(thread_idx).into());
+
+        self.kdl_node_calls
+            .get_mut(&new_thread.id())
+            .unwrap()
+            .push(node);
+
+        assert!(
+            self.last_fn_addrs
+                .insert(new_thread.id(), Vec::new())
+                .is_none()
+        );
+
+        Ok(())
+    }
+
     async fn thread_exited(
         &mut self,
         _session: &mut Self::Session,
-        _thread_id: u64,
+        thread_id: u64,
         _exit_code: i32,
     ) -> Result<(), Self::Error> {
-        while self.kdl_node_calls.len() > 1 {
-            let node = self.kdl_node_calls.pop().unwrap();
-            self.kdl_node_calls
+        let kdl_node_calls = self.kdl_node_calls.get_mut(&thread_id).unwrap();
+
+        while kdl_node_calls.len() > 1 {
+            let node = kdl_node_calls.pop().unwrap();
+
+            kdl_node_calls
                 .last_mut()
                 .unwrap()
                 .ensure_children()

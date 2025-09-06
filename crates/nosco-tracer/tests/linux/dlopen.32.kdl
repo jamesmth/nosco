@@ -1,12 +1,12 @@
 start {
     binaries {
-        - <exe>
-        - ld-linux.so.2
-        - linux-vdso.so.1
+        <exe>
+        ld-linux.so.2
+        linux-vdso.so.1
     }
 }
 
-trace {
+thread 1 {
     load_binary linux-gate.so.1
     load_binary libc.so.6
     unload_binary linux-gate.so.1
