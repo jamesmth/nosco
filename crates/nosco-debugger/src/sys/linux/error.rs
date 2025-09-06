@@ -59,6 +59,9 @@ pub enum Error {
 
     #[error("Child process execution failed: {0}")]
     ChildExec(std::io::Error),
+
+    #[error("Linux kernel >=5.3 required")]
+    BadKernelVersion,
 }
 
 /// Result type of this crate.

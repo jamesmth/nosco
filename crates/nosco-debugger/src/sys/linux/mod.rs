@@ -5,9 +5,10 @@ mod session;
 pub mod thread;
 
 use std::ffi::{CString, NulError};
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::ffi::OsStringExt;
 
+use nix::errno::Errno;
 use nix::fcntl::OFlag;
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
@@ -98,9 +99,16 @@ pub async fn spawn_debuggee(
         }
     };
 
-    imp::wait_for_thread_ready(pid)?;
+    let ret = unsafe { nix::libc::syscall(nix::libc::SYS_pidfd_open, pid, 0) };
+    let pidfd = match Errno::result(ret) {
+        Ok(fd) => unsafe { OwnedFd::from_raw_fd(fd as RawFd) },
+        Err(Errno::ENOSYS) => return Err(crate::sys::Error::BadKernelVersion),
+        Err(e) => return Err(e.into()),
+    };
 
-    let handle = TracedProcessHandle::new(pid, true);
+    let handle = TracedProcessHandle::new(pidfd, pid, true);
+
+    imp::wait_for_thread_ready(handle.id())?;
 
     let stdio = TracedProcessStdio {
         stdin: parent_stdin.into(),
