@@ -1,0 +1,31 @@
+start {
+    binaries {
+        <exe>
+        ld-linux-x86-64.so.2
+        linux-vdso.so.1
+    }
+}
+
+thread 1 {
+    load_binary libc.so.6
+
+    call main {
+        create_thread 2
+    }
+}
+
+thread 2 {
+    call thread_start {
+        <0x0>  "push rbp"
+        <0x1>  "mov rbp, rsp"
+        <0x4>  "mov rdi, 4"
+        <0xb>  "call <imm>"
+
+        call <unknown>
+
+        <0x10>  "mov dword ptr [rax], 7"
+        <0x16> "leave"
+        <0x17> "ret"
+    }
+}
+

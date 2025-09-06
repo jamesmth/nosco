@@ -11,7 +11,7 @@ use indexmap::IndexSet;
 use nix::libc::{PTRACE_EVENT_CLONE, PTRACE_EVENT_EXIT};
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
-use nix::sys::wait::{WaitStatus, waitpid};
+use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::Pid;
 use nosco_symbol::elf::{LinkMap, MappedElf};
 use nosco_tracer::debugger::{DebugStateChange, ExitStatus};
@@ -187,8 +187,7 @@ impl Session {
 
     pub async fn wait_for_debug_stop(&mut self) -> crate::sys::Result<DebugStop> {
         loop {
-            // FIXME: this action blocks the async runtime
-            let status = waitpid(None, None)?;
+            let status = waitpid(None, Some(WaitPidFlag::__WNOTHREAD))?;
 
             let stop = match status {
                 WaitStatus::Stopped(pid, signal) => DebugStop::Exception {

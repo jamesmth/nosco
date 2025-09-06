@@ -1,0 +1,32 @@
+start {
+    binaries {
+        <exe>
+        ld-linux.so.2
+        linux-vdso.so.1
+    }
+}
+
+thread 1 {
+    load_binary linux-gate.so.1
+    load_binary libc.so.6
+    unload_binary linux-gate.so.1
+
+    call main {
+        create_thread 2
+    }
+}
+
+thread 2 {
+    call thread_start {
+        <0x0> "push ebp"
+        <0x1> "mov ebp, esp"
+        <0x3> "push 4"
+        <0x5> "call <imm>"
+
+        call <unknown>
+
+        <0xa> "mov dword ptr [eax], 7"
+        <0x10> leave
+        <0x11> ret
+    }
+}

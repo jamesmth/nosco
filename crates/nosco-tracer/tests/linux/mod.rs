@@ -100,6 +100,16 @@ async fn backtrace_depth4_64bit_nopie() {
 }
 
 #[test(tokio::test)]
+async fn test_multithreading_64bit() {
+    test_multithreading(true).await;
+}
+
+#[test(tokio::test)]
+async fn test_multithreading_32bit() {
+    test_multithreading(false).await;
+}
+
+#[test(tokio::test)]
 async fn recursive_ret_breakpoint() {
     let base_dir: PathBuf = "tests/linux".to_owned().into();
 
@@ -123,7 +133,12 @@ async fn recursive_ret_breakpoint() {
         .expect("spawn");
 
     let status = tracee.resume_and_trace().await.expect("run");
-    assert!(matches!(status, ExitStatus::ExitCode(0)));
+    match status {
+        ExitStatus::ExitCode(exit_code) => assert_eq!(exit_code, 0),
+        ExitStatus::Exception(exception) => {
+            panic!("Traced process exited by {}", exception.0);
+        }
+    }
 
     let trace_file = "recursive_ret_breakpoint.kdl";
 
@@ -136,7 +151,11 @@ async fn recursive_ret_breakpoint() {
     generated_trace.autoformat();
     expected_trace.autoformat();
 
-    assert_eq!(expected_trace.to_string(), generated_trace.to_string());
+    let generated_trace = generated_trace.to_string();
+    let expected_trace = expected_trace.to_string();
+    if generated_trace != expected_trace {
+        panic!("EXPECTED:\n{expected_trace}GOT:\n{generated_trace}");
+    }
 
     drop(tracee_path);
 }
@@ -165,7 +184,12 @@ pub async fn test_trace_hello(is_64bit: bool, is_pie: bool, is_static: bool) {
         .expect("spawn");
 
     let status = tracee.resume_and_trace().await.expect("run");
-    assert!(matches!(status, ExitStatus::ExitCode(0)));
+    match status {
+        ExitStatus::ExitCode(exit_code) => assert_eq!(exit_code, 0),
+        ExitStatus::Exception(exception) => {
+            panic!("Traced process exited by {}", exception.0);
+        }
+    }
 
     let mut stdout = tokio::process::ChildStdout::from_std(tracee_stdio.stdout).expect("stdout");
 
@@ -192,7 +216,11 @@ pub async fn test_trace_hello(is_64bit: bool, is_pie: bool, is_static: bool) {
     generated_trace.autoformat();
     expected_trace.autoformat();
 
-    assert_eq!(expected_trace.to_string(), generated_trace.to_string());
+    let generated_trace = generated_trace.to_string();
+    let expected_trace = expected_trace.to_string();
+    if generated_trace != expected_trace {
+        panic!("EXPECTED:\n{expected_trace}GOT:\n{generated_trace}");
+    }
 
     drop(tracee_path);
 }
@@ -221,7 +249,12 @@ pub async fn test_trace_dlopen(is_64bit: bool, is_pie: bool, is_static: bool) {
         .expect("spawn");
 
     let status = tracee.resume_and_trace().await.expect("run");
-    assert!(matches!(status, ExitStatus::ExitCode(0)));
+    match status {
+        ExitStatus::ExitCode(exit_code) => assert_eq!(exit_code, 0),
+        ExitStatus::Exception(exception) => {
+            panic!("Traced process exited by {}", exception.0);
+        }
+    }
 
     let trace_file = format!(
         "dlopen.{}{}.kdl",
@@ -238,7 +271,11 @@ pub async fn test_trace_dlopen(is_64bit: bool, is_pie: bool, is_static: bool) {
     generated_trace.autoformat();
     expected_trace.autoformat();
 
-    assert_eq!(expected_trace.to_string(), generated_trace.to_string());
+    let generated_trace = generated_trace.to_string();
+    let expected_trace = expected_trace.to_string();
+    if generated_trace != expected_trace {
+        panic!("EXPECTED:\n{expected_trace}GOT:\n{generated_trace}");
+    }
 
     drop(tracee_path);
 }
@@ -267,7 +304,12 @@ pub async fn test_backtrace(depth: usize, is_64bit: bool, is_pie: bool, is_stati
         .expect("spawn");
 
     let status = tracee.resume_and_trace().await.expect("run");
-    assert!(matches!(status, ExitStatus::ExitCode(0)));
+    match status {
+        ExitStatus::ExitCode(exit_code) => assert_eq!(exit_code, 0),
+        ExitStatus::Exception(exception) => {
+            panic!("Traced process exited by {}", exception.0);
+        }
+    }
 
     let trace_file = "backtrace.kdl";
 
@@ -280,7 +322,63 @@ pub async fn test_backtrace(depth: usize, is_64bit: bool, is_pie: bool, is_stati
     generated_trace.autoformat();
     expected_trace.autoformat();
 
-    assert_eq!(expected_trace.to_string(), generated_trace.to_string());
+    let generated_trace = generated_trace.to_string();
+    let expected_trace = expected_trace.to_string();
+    if generated_trace != expected_trace {
+        panic!("EXPECTED:\n{expected_trace}GOT:\n{generated_trace}");
+    }
+
+    drop(tracee_path);
+}
+
+async fn test_multithreading(is_64bit: bool) {
+    let base_dir: PathBuf = "tests/linux".to_owned().into();
+
+    let asm_file = format!("multithreading.{}.s", if is_64bit { "64" } else { "32" });
+
+    let tracee_path =
+        self::utils::compile_tracee_with_gcc(&base_dir.join(asm_file), is_64bit, false, false);
+    let tracee_name = tracee_path.file_name().unwrap().to_string_lossy();
+
+    let trace_handler = TestTraceHandler::new(tracee_name.to_string(), is_64bit, None);
+
+    let tracer = nosco_tracer::tracer::Tracer::builder()
+        .with_debugger(nosco_debugger::Debugger)
+        .with_event_handler(trace_handler)
+        .trace_scopes()
+        .scope(tracee_name.as_ref(), "main", 0)
+        .scope(tracee_name, "thread_start", 1)
+        .build();
+
+    let (mut tracee, _) = tracer
+        .spawn(nosco_tracer::Command::new(&tracee_path))
+        .await
+        .expect("spawn");
+
+    let status = tracee.resume_and_trace().await.expect("run");
+    match status {
+        ExitStatus::ExitCode(exit_code) => assert_eq!(exit_code, 0),
+        ExitStatus::Exception(exception) => {
+            panic!("Traced process exited by {}", exception.0);
+        }
+    }
+
+    let trace_file = format!("multithreading.{}.kdl", if is_64bit { "64" } else { "32" });
+
+    let mut generated_trace = tracee.into_inner().into_kdl();
+    let mut expected_trace = tokio::fs::read_to_string(base_dir.join(trace_file))
+        .await
+        .map(|s| KdlDocument::parse(&s).expect("parse"))
+        .expect("read");
+
+    generated_trace.autoformat();
+    expected_trace.autoformat();
+
+    let generated_trace = generated_trace.to_string();
+    let expected_trace = expected_trace.to_string();
+    if generated_trace != expected_trace {
+        panic!("EXPECTED:\n{expected_trace}GOT:\n{generated_trace}");
+    }
 
     drop(tracee_path);
 }
