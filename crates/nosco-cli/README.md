@@ -84,7 +84,7 @@ Here is an overview of the direction this project is heading.
 |----------------------------------------------------------|-----------|-----|
 | CLI command `run` to trace new processes                 | 🔜 (v0.1) | ✅ |
 | CLI command `dump` to inspect trace session files        | 🔜 (v0.1) | ✅ |
-| Tracing backend (**x86** Linux): `ptrace`                | 🔜 (v0.1) | <ul><li>[x] single-thread tracing</li><li>[ ] multi-thread tracing</li><li>[x] 32-bit process tracing</li><li>[x] 64-bit process tracing</li></ul> |
+| Tracing backend (**x86** Linux): `ptrace`                | 🔜 (v0.1) | ✅ |
 | CLI command `dump`: symbolication of dumped addresses    | 🔜 (v0.1) | ✅ |
 | Tracing backend (**x86** Windows): `debugapi`            | ❓(TBD)   |    |
 | Tracing backend (**ARM** Linux): `ptrace`                | ❓(TBD)   |    |
