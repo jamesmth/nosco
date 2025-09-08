@@ -66,20 +66,13 @@ impl CallInformation {
         }
 
         if let Some(backtrace) = &self.backtrace {
-            let mut bt_node = KdlNode::new("backtrace");
-
-            if backtrace.is_empty() {
-                bt_node.entries_mut().push(KdlEntry::new("<none>"));
-            } else {
-                bt_node.ensure_children().nodes_mut().extend(
-                    backtrace
-                        .iter()
-                        .rev()
-                        .map(|bt| bt.dump_to_kdl_node(self.address.is_some())),
-                );
-            }
-
-            kdl_node.ensure_children().nodes_mut().push(bt_node);
+            kdl_node
+                .ensure_children()
+                .nodes_mut()
+                .push(dump_backtrace_info_to_kdl(
+                    backtrace,
+                    self.address.is_some(),
+                ));
         }
 
         if let Some(state_updates) = &self.state_updates {
@@ -170,33 +163,14 @@ impl CallInformationFetcher {
                 .map(|res| res.into_diagnostic())
                 .collect::<miette::Result<Vec<_>>>()?;
 
-            backtrace
-                .into_iter()
-                .map(|bt| match bt {
-                    BacktraceElement::CallAddr(addr) => {
-                        let sym = if let Some(resolver) = resolver.as_deref_mut() {
-                            resolver
-                                .resolve_symbol_at_addr(addr, metadata.timestamp)?
-                                .map(|(sym, off)| {
-                                    if off != 0 {
-                                        format!("{sym}+{off:#x}")
-                                    } else {
-                                        sym
-                                    }
-                                })
-                        } else {
-                            None
-                        };
-
-                        Ok(BacktraceElementInformation::CallAddr(addr, sym))
-                    }
-                    BacktraceElement::CallId(call_id, addr) => CallInformation::fetcher()
-                        .with_call_address(self.fetch_address)
-                        .fetch_with_addr_in_call(call_id, addr, reader, resolver.as_deref_mut())
-                        .map(BacktraceElementInformation::CallInfo),
-                })
-                .collect::<miette::Result<Vec<_>>>()
-                .map(Some)?
+            fetch_backtrace_info(
+                backtrace,
+                reader,
+                resolver.as_deref_mut(),
+                metadata.timestamp,
+                self.fetch_address,
+            )
+            .map(Some)?
         } else {
             None
         };
@@ -242,6 +216,61 @@ impl CallInformationFetcher {
             state_updates,
         })
     }
+}
+
+pub(super) fn fetch_backtrace_info(
+    backtrace: Vec<BacktraceElement>,
+    reader: &mut MlaStorageReader<'_, impl Read + Seek>,
+    mut resolver: Option<&mut SymbolResolver>,
+    timestamp: SystemTime,
+    fetch_addresses: bool,
+) -> miette::Result<Vec<BacktraceElementInformation>> {
+    backtrace
+        .into_iter()
+        .map(|bt| match bt {
+            BacktraceElement::CallAddr(addr) => {
+                let sym = if let Some(resolver) = resolver.as_deref_mut() {
+                    resolver
+                        .resolve_symbol_at_addr(addr, timestamp)?
+                        .map(|(sym, off)| {
+                            if off != 0 {
+                                format!("{sym}+{off:#x}")
+                            } else {
+                                sym
+                            }
+                        })
+                } else {
+                    None
+                };
+
+                Ok(BacktraceElementInformation::CallAddr(addr, sym))
+            }
+            BacktraceElement::CallId(call_id, addr) => CallInformation::fetcher()
+                .with_call_address(fetch_addresses)
+                .fetch_with_addr_in_call(call_id, addr, reader, resolver.as_deref_mut())
+                .map(BacktraceElementInformation::CallInfo),
+        })
+        .collect()
+}
+
+pub(super) fn dump_backtrace_info_to_kdl(
+    backtrace: &[BacktraceElementInformation],
+    dump_addresses: bool,
+) -> KdlNode {
+    let mut node = KdlNode::new("backtrace");
+
+    if backtrace.is_empty() {
+        node.entries_mut().push(KdlEntry::new("<none>"));
+    } else {
+        node.ensure_children().nodes_mut().extend(
+            backtrace
+                .iter()
+                .rev()
+                .map(|bt| bt.dump_to_kdl_node(dump_addresses)),
+        );
+    }
+
+    node
 }
 
 pub(super) enum BacktraceElementInformation {

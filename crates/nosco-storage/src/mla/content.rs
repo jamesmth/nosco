@@ -102,6 +102,10 @@ pub struct StateUpdateOrigin {
 
     /// ID (and instruction address) of the call responsible for the update.
     pub call_id: Option<(String, u64)>,
+
+    /// Backtrace of parent function calls (addresses) leading to this
+    /// update.
+    pub backtrace: Vec<u64>,
 }
 
 /// Data related to a change occurring on the tracee's state.

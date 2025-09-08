@@ -112,12 +112,12 @@ impl<W> TraceSessionStorageWriter for MlaStorageWriter<W> {
 
     async fn write_loaded_binary(
         &mut self,
-        thread_id: Option<u64>,
+        thread_id_with_backtrace: Option<(u64, Vec<u64>)>,
         binary_path: &Path,
         addr_range: Range<u64>,
-    ) -> Result<(), Self::Error> {
+    ) -> std::result::Result<(), Self::Error> {
         self.send_storage_action(StorageAction::WriteLoadedBinary {
-            thread_id,
+            thread_id_with_backtrace,
             path: binary_path.to_path_buf(),
             addr_range,
         })
@@ -128,21 +128,23 @@ impl<W> TraceSessionStorageWriter for MlaStorageWriter<W> {
         &mut self,
         thread_id: u64,
         unload_addr: u64,
-    ) -> Result<(), Self::Error> {
+        backtrace: Vec<u64>,
+    ) -> std::result::Result<(), Self::Error> {
         self.send_storage_action(StorageAction::WriteUnloadedBinary {
             thread_id,
             unload_addr,
+            backtrace,
         })
         .await
     }
 
     async fn write_created_thread(
         &mut self,
-        parent_thread_id: Option<u64>,
+        parent_thread_id_with_backtrace: Option<(u64, Vec<u64>)>,
         new_thread_id: u64,
-    ) -> Result<(), Self::Error> {
+    ) -> std::result::Result<(), Self::Error> {
         self.send_storage_action(StorageAction::WriteCreatedThread {
-            thread_id: parent_thread_id,
+            parent_thread_id_with_backtrace,
             new_thread_id,
         })
         .await
@@ -152,10 +154,12 @@ impl<W> TraceSessionStorageWriter for MlaStorageWriter<W> {
         &mut self,
         thread_id: u64,
         exit_code: i32,
-    ) -> Result<(), Self::Error> {
+        backtrace: Vec<u64>,
+    ) -> std::result::Result<(), Self::Error> {
         self.send_storage_action(StorageAction::WriteExitedThread {
             thread_id,
             exit_code,
+            backtrace,
         })
         .await
     }
@@ -231,29 +235,31 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
                     self.write_executed_instruction(thread_id, opcodes_addr, opcodes)?;
                 }
                 StorageAction::WriteLoadedBinary {
-                    thread_id,
+                    thread_id_with_backtrace,
                     path,
                     addr_range,
                 } => {
-                    self.write_loaded_binary(thread_id, path, addr_range)?;
+                    self.write_loaded_binary(thread_id_with_backtrace, path, addr_range)?;
                 }
                 StorageAction::WriteUnloadedBinary {
                     thread_id,
                     unload_addr,
+                    backtrace,
                 } => {
-                    self.write_unloaded_binary(thread_id, unload_addr)?;
+                    self.write_unloaded_binary(thread_id, unload_addr, backtrace)?;
                 }
                 StorageAction::WriteCreatedThread {
-                    thread_id,
+                    parent_thread_id_with_backtrace,
                     new_thread_id,
                 } => {
-                    self.write_created_thread(thread_id, new_thread_id)?;
+                    self.write_created_thread(parent_thread_id_with_backtrace, new_thread_id)?;
                 }
                 StorageAction::WriteExitedThread {
                     thread_id,
                     exit_code,
+                    backtrace,
                 } => {
-                    self.write_exited_thread(thread_id, exit_code)?;
+                    self.write_exited_thread(thread_id, exit_code, backtrace)?;
                 }
                 StorageAction::Finalize => break self.finalize(),
             }
@@ -411,14 +417,14 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
 
     fn write_loaded_binary(
         &mut self,
-        thread_id: Option<u64>,
+        thread_id_with_backtrace: Option<(u64, Vec<u64>)>,
         path: PathBuf,
         addr_range: Range<u64>,
     ) -> crate::Result<()> {
         let state_change = StateChangeData::LoadedBinary { path, addr_range };
 
-        if let Some(thread_id) = thread_id {
-            self.write_state_update(thread_id, state_change)?;
+        if let Some((thread_id, backtrace)) = thread_id_with_backtrace {
+            self.write_state_update(thread_id, state_change, backtrace)?;
         } else {
             self.write_state_init(state_change)?;
         }
@@ -428,14 +434,15 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
 
     fn write_created_thread(
         &mut self,
-        thread_id: Option<u64>,
+        parent_thread_id_with_backtrace: Option<(u64, Vec<u64>)>,
         new_thread_id: u64,
     ) -> crate::Result<()> {
-        let state_update_header = if let Some(thread_id) = thread_id {
-            Some(self.write_state_update_origin(thread_id)?)
-        } else {
-            None
-        };
+        let state_update_header =
+            if let Some((thread_id, backtrace)) = parent_thread_id_with_backtrace {
+                Some(self.write_state_update_origin(thread_id, backtrace)?)
+            } else {
+                None
+            };
 
         let created_thread = CreatedThread {
             state_update_header,
@@ -485,13 +492,27 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
         Ok(())
     }
 
-    fn write_unloaded_binary(&mut self, thread_id: u64, unload_addr: u64) -> crate::Result<()> {
-        self.write_state_update(thread_id, StateChangeData::UnloadedBinary { unload_addr })?;
+    fn write_unloaded_binary(
+        &mut self,
+        thread_id: u64,
+        unload_addr: u64,
+        backtrace: Vec<u64>,
+    ) -> crate::Result<()> {
+        self.write_state_update(
+            thread_id,
+            StateChangeData::UnloadedBinary { unload_addr },
+            backtrace,
+        )?;
 
         Ok(())
     }
 
-    fn write_exited_thread(&mut self, thread_id: u64, exit_code: i32) -> crate::Result<()> {
+    fn write_exited_thread(
+        &mut self,
+        thread_id: u64,
+        exit_code: i32,
+        backtrace: Vec<u64>,
+    ) -> crate::Result<()> {
         let Some(thread) = self.created_threads.remove(&thread_id) else {
             return Err(crate::Error::UnexpectedThreadId(thread_id));
         };
@@ -504,6 +525,7 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
                 thread_id,
                 exit_code,
             },
+            backtrace,
         )?;
 
         Ok(())
@@ -549,6 +571,7 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
     fn write_state_update_origin(
         &mut self,
         thread_id: u64,
+        backtrace: Vec<u64>,
     ) -> crate::Result<StateUpdateDataHeader> {
         let update_id = self.update_id_generator.next_id();
 
@@ -575,12 +598,18 @@ impl<W: Write + Send> MlaStorageWriterCore<'_, W> {
                 thread_id,
                 timestamp: SystemTime::now(),
                 call_id,
+                backtrace,
             },
         })
     }
 
-    fn write_state_update(&mut self, thread_id: u64, change: StateChangeData) -> crate::Result<()> {
-        let update_header = self.write_state_update_origin(thread_id)?;
+    fn write_state_update(
+        &mut self,
+        thread_id: u64,
+        change: StateChangeData,
+        backtrace: Vec<u64>,
+    ) -> crate::Result<()> {
+        let update_header = self.write_state_update_origin(thread_id, backtrace)?;
 
         let state_update_stream_id = self.get_or_create_state_update_stream()?;
 
@@ -622,7 +651,7 @@ enum StorageAction {
     },
 
     WriteLoadedBinary {
-        thread_id: Option<u64>,
+        thread_id_with_backtrace: Option<(u64, Vec<u64>)>,
         path: PathBuf,
         addr_range: Range<u64>,
     },
@@ -630,16 +659,18 @@ enum StorageAction {
     WriteUnloadedBinary {
         thread_id: u64,
         unload_addr: u64,
+        backtrace: Vec<u64>,
     },
 
     WriteCreatedThread {
-        thread_id: Option<u64>,
+        parent_thread_id_with_backtrace: Option<(u64, Vec<u64>)>,
         new_thread_id: u64,
     },
 
     WriteExitedThread {
         thread_id: u64,
         exit_code: i32,
+        backtrace: Vec<u64>,
     },
 
     Finalize,

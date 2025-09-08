@@ -2,11 +2,12 @@ use std::io::{Read, Seek};
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 use miette::IntoDiagnostic;
-use nosco_storage::MlaStorageReader;
 use nosco_storage::content::{StateChangeData, StateUpdateOrigin};
+use nosco_storage::{BacktraceElement, MlaStorageReader};
 
 use super::SymbolResolver;
-use super::call_info::{CallInformation, CallInformationFetcher};
+use super::call_info::{BacktraceElementInformation, CallInformation, CallInformationFetcher};
+use super::call_info::{dump_backtrace_info_to_kdl, fetch_backtrace_info};
 
 pub fn dump_to_kdl(
     mut reader: MlaStorageReader<impl Read + Seek>,
@@ -129,45 +130,26 @@ impl PartialThreadInformation {
     ) -> miette::Result<ThreadInformation> {
         let origin = self
             .origin
-            .map(
-                |StateUpdateOrigin {
-                     thread_id,
-                     call_id,
-                     timestamp: _,
-                 }| {
-                    call_id
-                        .map(|(call_id, addr)| {
-                            call_info_fetcher
-                                .fetch(call_id, reader, resolver.as_deref_mut())
-                                .map(|mut call_info| {
-                                    if let Some(address) = call_info.address.as_mut() {
-                                        *address = addr;
-                                    };
-                                    call_info
-                                })
-                        })
-                        .transpose()
-                        .map(|call_info| (thread_id, call_info))
-                },
-            )
+            .map(|origin| {
+                ThreadOriginInfo::fetch_origin_info(
+                    origin,
+                    reader,
+                    call_info_fetcher,
+                    resolver.as_deref_mut(),
+                )
+            })
             .transpose()?;
 
         let exit = self
             .exit
-            .map(|(StateUpdateOrigin { call_id, .. }, exit_code)| {
-                call_id
-                    .map(|(call_id, addr)| {
-                        call_info_fetcher
-                            .fetch(call_id, reader, resolver.as_deref_mut())
-                            .map(|mut call_info| {
-                                if let Some(address) = call_info.address.as_mut() {
-                                    *address = addr;
-                                };
-                                call_info
-                            })
-                    })
-                    .transpose()
-                    .map(|call_info| (call_info, exit_code))
+            .map(|(origin, exit_code)| {
+                ThreadExitInfo::fetch_exit_info(
+                    origin,
+                    exit_code,
+                    reader,
+                    call_info_fetcher,
+                    resolver.as_deref_mut(),
+                )
             })
             .transpose()?;
 
@@ -188,8 +170,8 @@ impl PartialThreadInformation {
 
 struct ThreadInformation {
     thread_id: u64,
-    origin: Option<(u64, Option<CallInformation>)>,
-    exit: Option<(Option<CallInformation>, i32)>,
+    origin: Option<ThreadOriginInfo>,
+    exit: Option<ThreadExitInfo>,
     root_calls_info: Vec<CallInformation>,
 }
 
@@ -199,19 +181,11 @@ impl ThreadInformation {
             .entries_mut()
             .push(i128::from(self.thread_id).into());
 
-        if let Some((thread_id, ref call_info)) = self.origin {
-            kdl_node.ensure_children().nodes_mut().push({
-                let mut node = KdlNode::new("created");
-
-                if let Some(call_info) = call_info {
-                    node = call_info.dump_to_kdl_node(Some(node));
-                }
-
-                node.entries_mut()
-                    .push(KdlEntry::new_prop("thread", i128::from(thread_id)));
-
-                node
-            });
+        if let Some(ref origin) = self.origin {
+            kdl_node
+                .ensure_children()
+                .nodes_mut()
+                .push(origin.dump_to_kdl_node());
         }
 
         for call_info in self.root_calls_info.iter() {
@@ -221,19 +195,160 @@ impl ThreadInformation {
                 .push(call_info.dump_to_kdl_node(Some(KdlNode::new("traced"))));
         }
 
-        if let Some((ref call_info, exit_code)) = self.exit {
-            kdl_node.ensure_children().nodes_mut().push({
-                let mut node = KdlNode::new("exited");
-
-                node.entries_mut()
-                    .push(KdlEntry::new_prop("code", i128::from(exit_code)));
-
-                if let Some(call_info) = call_info {
-                    node = call_info.dump_to_kdl_node(Some(node));
-                }
-
-                node
-            });
+        if let Some(ref exit) = self.exit {
+            kdl_node
+                .ensure_children()
+                .nodes_mut()
+                .push(exit.dump_to_kdl_node());
         }
+    }
+}
+
+struct ThreadOriginInfo {
+    thread_id: u64,
+    backtrace: Option<Vec<BacktraceElementInformation>>,
+    call_info: Option<CallInformation>,
+    dump_addresses: bool,
+}
+
+impl ThreadOriginInfo {
+    fn fetch_origin_info(
+        update_origin: StateUpdateOrigin,
+        reader: &mut MlaStorageReader<'_, impl Read + Seek>,
+        call_info_fetcher: CallInformationFetcher,
+        mut resolver: Option<&mut SymbolResolver>,
+    ) -> miette::Result<Self> {
+        let StateUpdateOrigin {
+            thread_id,
+            timestamp,
+            call_id,
+            backtrace,
+        } = update_origin;
+
+        let call_info = if let Some((call_id, addr)) = call_id {
+            let mut call_info =
+                call_info_fetcher.fetch(call_id, reader, resolver.as_deref_mut())?;
+            if let Some(address) = call_info.address.as_mut() {
+                *address = addr;
+            };
+            Some(call_info)
+        } else {
+            None
+        };
+
+        let backtrace = if call_info.is_none() && call_info_fetcher.fetch_backtrace {
+            fetch_backtrace_info(
+                backtrace
+                    .into_iter()
+                    .map(BacktraceElement::CallAddr)
+                    .collect(),
+                reader,
+                resolver,
+                timestamp,
+                call_info_fetcher.fetch_address,
+            )
+            .map(Some)?
+        } else {
+            None
+        };
+
+        Ok(Self {
+            thread_id,
+            backtrace,
+            call_info,
+            dump_addresses: call_info_fetcher.fetch_address,
+        })
+    }
+
+    fn dump_to_kdl_node(&self) -> KdlNode {
+        let mut node = KdlNode::new("created");
+
+        if let Some(ref call_info) = self.call_info {
+            node = call_info.dump_to_kdl_node(Some(node));
+        } else if let Some(ref backtrace) = self.backtrace {
+            node.ensure_children()
+                .nodes_mut()
+                .push(dump_backtrace_info_to_kdl(backtrace, self.dump_addresses));
+        }
+
+        node.entries_mut()
+            .push(KdlEntry::new_prop("thread", i128::from(self.thread_id)));
+
+        node
+    }
+}
+
+struct ThreadExitInfo {
+    backtrace: Option<Vec<BacktraceElementInformation>>,
+    call_info: Option<CallInformation>,
+    exit_code: i32,
+    dump_addresses: bool,
+}
+
+impl ThreadExitInfo {
+    fn fetch_exit_info(
+        update_origin: StateUpdateOrigin,
+        exit_code: i32,
+        reader: &mut MlaStorageReader<'_, impl Read + Seek>,
+        call_info_fetcher: CallInformationFetcher,
+        mut resolver: Option<&mut SymbolResolver>,
+    ) -> miette::Result<Self> {
+        let StateUpdateOrigin {
+            thread_id: _,
+            timestamp,
+            call_id,
+            backtrace,
+        } = update_origin;
+
+        let call_info = if let Some((call_id, addr)) = call_id {
+            let mut call_info =
+                call_info_fetcher.fetch(call_id, reader, resolver.as_deref_mut())?;
+            if let Some(address) = call_info.address.as_mut() {
+                *address = addr;
+            };
+            Some(call_info)
+        } else {
+            None
+        };
+
+        let backtrace = if call_info.is_none() && call_info_fetcher.fetch_backtrace {
+            fetch_backtrace_info(
+                backtrace
+                    .into_iter()
+                    .map(BacktraceElement::CallAddr)
+                    .collect(),
+                reader,
+                resolver,
+                timestamp,
+                call_info_fetcher.fetch_address,
+            )
+            .map(Some)?
+        } else {
+            None
+        };
+
+        Ok(Self {
+            backtrace,
+            call_info,
+            exit_code,
+            dump_addresses: call_info_fetcher.fetch_address,
+        })
+    }
+
+    fn dump_to_kdl_node(&self) -> KdlNode {
+        let mut node = KdlNode::new("exited");
+
+        node.entries_mut()
+            .push(KdlEntry::new_prop("code", i128::from(self.exit_code)));
+
+        if let Some(ref call_info) = self.call_info {
+            node = call_info.dump_to_kdl_node(Some(node));
+        } else if let Some(ref backtrace) = self.backtrace {
+            node.ensure_children()
+                .nodes_mut()
+                .push(dump_backtrace_info_to_kdl(backtrace, self.dump_addresses));
+        }
+
+        node
     }
 }

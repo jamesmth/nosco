@@ -103,7 +103,7 @@ mod tests {
             .block_on(async move {
                 let mut writer = MlaStorageWriter::from_writer(vec![]).unwrap();
 
-                writer.write_exited_thread(1, 0).await.unwrap();
+                writer.write_exited_thread(1, 0, vec![]).await.unwrap();
 
                 let err = writer.finalize().await.unwrap_err();
 
@@ -214,8 +214,8 @@ mod tests {
 
                 writer.write_created_thread(None, 1).await.unwrap();
 
-                writer.write_unloaded_binary(1, 0x0).await.unwrap();
-                writer.write_unloaded_binary(1, 0x1).await.unwrap();
+                writer.write_unloaded_binary(1, 0x0, vec![]).await.unwrap();
+                writer.write_unloaded_binary(1, 0x1, vec![]).await.unwrap();
 
                 writer.finalize_and_unwrap().await.unwrap()
             });
@@ -255,7 +255,10 @@ mod tests {
                 let mut writer = MlaStorageWriter::from_writer(vec![]).unwrap();
 
                 writer.write_created_thread(None, 1).await.unwrap();
-                writer.write_created_thread(Some(1), 2).await.unwrap();
+                writer
+                    .write_created_thread(Some((1, vec![])), 2)
+                    .await
+                    .unwrap();
 
                 writer.finalize_and_unwrap().await.unwrap()
             });
@@ -307,10 +310,13 @@ mod tests {
                 let mut writer = MlaStorageWriter::from_writer(vec![]).unwrap();
 
                 writer.write_created_thread(None, 1).await.unwrap();
-                writer.write_created_thread(Some(1), 2).await.unwrap();
+                writer
+                    .write_created_thread(Some((1, vec![])), 2)
+                    .await
+                    .unwrap();
 
-                writer.write_exited_thread(2, 0).await.unwrap();
-                writer.write_exited_thread(1, 0).await.unwrap();
+                writer.write_exited_thread(2, 0, vec![]).await.unwrap();
+                writer.write_exited_thread(1, 0, vec![]).await.unwrap();
 
                 writer.finalize_and_unwrap().await.unwrap()
             });

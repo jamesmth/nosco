@@ -48,8 +48,8 @@ pub trait TraceSessionStorageWriter {
     /// the tracer was attached to the tracee.
     fn write_loaded_binary(
         &mut self,
-        _thread_id: Option<u64>,
-        _binary: &Path,
+        _thread_id_with_backtrace: Option<(u64, Vec<u64>)>,
+        _binary_path: &Path,
         _addr_range: Range<u64>,
     ) -> impl Future<Output = std::result::Result<(), Self::Error>> {
         future::ready(Ok(()))
@@ -60,6 +60,7 @@ pub trait TraceSessionStorageWriter {
         &mut self,
         _thread_id: u64,
         _unload_addr: u64,
+        _backtrace: Vec<u64>,
     ) -> impl Future<Output = std::result::Result<(), Self::Error>> {
         future::ready(Ok(()))
     }
@@ -68,11 +69,11 @@ pub trait TraceSessionStorageWriter {
     ///
     /// # Note
     ///
-    /// `parent_thread_id` is `None` when the thread was created before
-    /// the tracer was attached to the tracee.
+    /// `parent_thread_id_with_backtrace` is `None` when the thread was
+    /// created before the tracer was attached to the tracee.
     fn write_created_thread(
         &mut self,
-        _parent_thread_id: Option<u64>,
+        _parent_thread_id_with_backtrace: Option<(u64, Vec<u64>)>,
         _new_thread_id: u64,
     ) -> impl Future<Output = std::result::Result<(), Self::Error>> {
         future::ready(Ok(()))
@@ -83,6 +84,7 @@ pub trait TraceSessionStorageWriter {
         &mut self,
         _thread_id: u64,
         _exit_code: i32,
+        _backtrace: Vec<u64>,
     ) -> impl Future<Output = std::result::Result<(), Self::Error>> {
         future::ready(Ok(()))
     }

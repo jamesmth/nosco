@@ -83,8 +83,9 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
     async fn binary_loaded(
         &mut self,
         _session: &mut Self::Session,
-        thread_id: Option<u64>,
-        binary: &mut MappedBin,
+        thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
+        binary: &mut <Self::Session as nosco_tracer::debugger::DebugSession>::MappedBinary,
+        is_loaded_on_start: bool,
     ) -> Result<(), Self::Error> {
         let binary_name = if binary.file_name() == self.exe_name {
             self.mapped_exe = Some(binary.clone());
@@ -93,12 +94,12 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
             binary.file_name()
         };
 
-        if let Some(thread_id) = thread_id {
+        if !is_loaded_on_start {
             let mut node = KdlNode::new("load_binary");
             node.entries_mut().push(binary_name.into());
 
             self.kdl_node_calls
-                .get_mut(&thread_id)
+                .get_mut(&thread.id())
                 .unwrap()
                 .last_mut()
                 .unwrap()
@@ -123,7 +124,7 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
     async fn binary_unloaded(
         &mut self,
         _session: &mut Self::Session,
-        thread_id: u64,
+        thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
         unload_addr: u64,
     ) -> Result<(), Self::Error> {
         let Some(binary_name) = self.mapped_images.remove(&unload_addr) else {
@@ -134,7 +135,7 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
         node.entries_mut().push(binary_name.into());
 
         self.kdl_node_calls
-            .get_mut(&thread_id)
+            .get_mut(&thread.id())
             .unwrap()
             .last_mut()
             .unwrap()
@@ -287,13 +288,15 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
     async fn thread_created(
         &mut self,
         _session: &mut Self::Session,
-        parent_thread_id: Option<u64>,
+        parent_thread: Option<
+            &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
+        >,
         new_thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
     ) -> Result<(), Self::Error> {
         let thread_idx = self.next_thread_idx;
         self.next_thread_idx += 1;
 
-        if let Some(parent_thread_id) = parent_thread_id {
+        if let Some(parent_thread_id) = parent_thread.map(|th| th.id()) {
             let mut node = KdlNode::new("create_thread");
             node.entries_mut().push(i128::from(thread_idx).into());
 
@@ -333,10 +336,10 @@ impl nosco_tracer::handler::EventHandler for TestTraceHandler {
     async fn thread_exited(
         &mut self,
         _session: &mut Self::Session,
-        thread_id: u64,
+        thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
         _exit_code: i32,
     ) -> Result<(), Self::Error> {
-        let kdl_node_calls = self.kdl_node_calls.get_mut(&thread_id).unwrap();
+        let kdl_node_calls = self.kdl_node_calls.get_mut(&thread.id()).unwrap();
 
         while kdl_node_calls.len() > 1 {
             let node = kdl_node_calls.pop().unwrap();

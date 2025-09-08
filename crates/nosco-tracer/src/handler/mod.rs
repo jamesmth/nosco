@@ -42,13 +42,14 @@ pub trait EventHandler {
     ///
     /// # Note
     ///
-    /// `thread_id` is `None` when the binary was loaded before
+    /// `is_loaded_on_start` is `true` when the binary was loaded before
     /// the tracer was attached to the tracee.
     fn binary_loaded(
         &mut self,
         _session: &mut Self::Session,
-        _thread_id: Option<u64>,
+        _thread: &<Self::Session as DebugSession>::StoppedThread,
         _binary: &mut <Self::Session as DebugSession>::MappedBinary,
+        _is_loaded_on_start: bool,
     ) -> impl Future<Output = Result<(), Self::Error>> {
         future::ready(Ok(()))
     }
@@ -57,7 +58,7 @@ pub trait EventHandler {
     fn binary_unloaded(
         &mut self,
         _session: &mut Self::Session,
-        _thread_id: u64,
+        _thread: &<Self::Session as DebugSession>::StoppedThread,
         _unload_addr: u64,
     ) -> impl Future<Output = Result<(), Self::Error>> {
         future::ready(Ok(()))
@@ -67,12 +68,12 @@ pub trait EventHandler {
     ///
     /// # Note
     ///
-    /// `parent_thread_id` is `None` when the thread was created before
-    /// the tracer was attached to the tracee.
+    /// `parent_thread` is `None` when the thread was created before the tracer
+    /// was attached to the tracee.
     fn thread_created(
         &mut self,
         _session: &mut Self::Session,
-        _parent_thread_id: Option<u64>,
+        _parent_thread: Option<&<Self::Session as DebugSession>::StoppedThread>,
         _new_thread: &<Self::Session as DebugSession>::StoppedThread,
     ) -> impl Future<Output = Result<(), Self::Error>> {
         future::ready(Ok(()))
@@ -82,7 +83,7 @@ pub trait EventHandler {
     fn thread_exited(
         &mut self,
         _session: &mut Self::Session,
-        _thread_id: u64,
+        _thread: &<Self::Session as DebugSession>::StoppedThread,
         _exit_code: i32,
     ) -> impl Future<Output = Result<(), Self::Error>> {
         future::ready(Ok(()))

@@ -32,12 +32,26 @@ impl<S: TraceSessionStorageWriter> EventHandler for TraceEventHandler<S> {
 
     async fn binary_loaded(
         &mut self,
-        _session: &mut Self::Session,
-        thread_id: Option<u64>,
-        binary: &mut <Self::Session as nosco_tracer::debugger::DebugSession>::MappedBinary,
+        session: &mut Self::Session,
+        thread: &<Self::Session as DebugSession>::StoppedThread,
+        binary: &mut <Self::Session as DebugSession>::MappedBinary,
+        is_loaded_on_start: bool,
     ) -> Result<(), Self::Error> {
+        let thread_id_with_backtrace = if !is_loaded_on_start {
+            let backtrace = session
+                .compute_backtrace(thread, self.backtrace_depth)
+                .map_err(DebuggerError)?;
+            Some((thread.id(), backtrace))
+        } else {
+            None
+        };
+
         self.storage
-            .write_loaded_binary(thread_id, binary.path(), binary.addr_range().clone())
+            .write_loaded_binary(
+                thread_id_with_backtrace,
+                binary.path(),
+                binary.addr_range().clone(),
+            )
             .await
             .map_err(StorageError)?;
 
@@ -46,12 +60,16 @@ impl<S: TraceSessionStorageWriter> EventHandler for TraceEventHandler<S> {
 
     async fn binary_unloaded(
         &mut self,
-        _session: &mut Self::Session,
-        thread_id: u64,
+        session: &mut Self::Session,
+        thread: &<Self::Session as DebugSession>::StoppedThread,
         unload_addr: u64,
     ) -> Result<(), Self::Error> {
+        let backtrace = session
+            .compute_backtrace(thread, self.backtrace_depth)
+            .map_err(DebuggerError)?;
+
         self.storage
-            .write_unloaded_binary(thread_id, unload_addr)
+            .write_unloaded_binary(thread.id(), unload_addr, backtrace)
             .await
             .map_err(StorageError)?;
 
@@ -110,12 +128,21 @@ impl<S: TraceSessionStorageWriter> EventHandler for TraceEventHandler<S> {
 
     async fn thread_created(
         &mut self,
-        _session: &mut Self::Session,
-        parent_thread_id: Option<u64>,
-        new_thread: &<Self::Session as nosco_tracer::debugger::DebugSession>::StoppedThread,
+        session: &mut Self::Session,
+        parent_thread: Option<&<Self::Session as DebugSession>::StoppedThread>,
+        new_thread: &<Self::Session as DebugSession>::StoppedThread,
     ) -> Result<(), Self::Error> {
+        let parent_thread_id_with_backtrace = if let Some(parent_thread) = parent_thread {
+            let backtrace = session
+                .compute_backtrace(parent_thread, self.backtrace_depth)
+                .map_err(DebuggerError)?;
+            Some((parent_thread.id(), backtrace))
+        } else {
+            None
+        };
+
         self.storage
-            .write_created_thread(parent_thread_id, new_thread.id())
+            .write_created_thread(parent_thread_id_with_backtrace, new_thread.id())
             .await
             .map_err(StorageError)?;
 
@@ -124,12 +151,16 @@ impl<S: TraceSessionStorageWriter> EventHandler for TraceEventHandler<S> {
 
     async fn thread_exited(
         &mut self,
-        _session: &mut Self::Session,
-        thread_id: u64,
+        session: &mut Self::Session,
+        thread: &<Self::Session as DebugSession>::StoppedThread,
         exit_code: i32,
     ) -> Result<(), Self::Error> {
+        let backtrace = session
+            .compute_backtrace(thread, self.backtrace_depth)
+            .map_err(DebuggerError)?;
+
         self.storage
-            .write_exited_thread(thread_id, exit_code)
+            .write_exited_thread(thread.id(), exit_code, backtrace)
             .await
             .map_err(StorageError)?;
 

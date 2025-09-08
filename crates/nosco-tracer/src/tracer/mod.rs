@@ -126,7 +126,7 @@ where
             .ok_or(crate::Error::TraceeWithoutThread)?;
 
         for binary in self.loaded_binaries.drain(..).collect::<Vec<_>>() {
-            self.handle_loaded_binary_in_tracee(main_thread, None, binary)
+            self.handle_loaded_binary_in_tracee(main_thread, binary, true)
                 .instrument(tracing::info_span!("StateInit"))
                 .await?;
         }
@@ -350,8 +350,8 @@ where
     async fn handle_loaded_binary_in_tracee(
         &mut self,
         thread: &S::StoppedThread,
-        loader_thread_id: Option<u64>,
         mut binary: S::MappedBinary,
+        is_loaded_on_start: bool,
     ) -> crate::Result<(), S::Error, H::Error> {
         tracing::info!(
             path = tracing::field::display(binary.path().display()),
@@ -360,7 +360,7 @@ where
         );
 
         self.handler
-            .binary_loaded(&mut self.session, loader_thread_id, &mut binary)
+            .binary_loaded(&mut self.session, thread, &mut binary, is_loaded_on_start)
             .await
             .map_err(HandlerError)?;
 
@@ -376,13 +376,13 @@ where
     async fn handle_created_thread_in_tracee(
         &mut self,
         mut thread: S::StoppedThread,
-        parent_thread_id: Option<u64>,
+        parent_thread: Option<&S::StoppedThread>,
         prev_instrs: &mut HashMap<u64, (u64, Opcodes)>,
     ) -> crate::Result<(), S::Error, H::Error> {
         tracing::info!(tid = thread.id(), "thread created");
 
         self.handler
-            .thread_created(&mut self.session, parent_thread_id, &thread)
+            .thread_created(&mut self.session, parent_thread, &thread)
             .await
             .map_err(HandlerError)?;
 
@@ -422,7 +422,7 @@ where
     ) -> crate::Result<(), S::Error, H::Error> {
         match state_change {
             DebugStateChange::BinaryLoaded(binary) => {
-                self.handle_loaded_binary_in_tracee(thread, Some(thread.id()), binary)
+                self.handle_loaded_binary_in_tracee(thread, binary, false)
                     .await
             }
 
@@ -430,7 +430,7 @@ where
                 tracing::info!(addr = format_args!("{addr:#x}"), "binary unloaded");
 
                 self.handler
-                    .binary_unloaded(&mut self.session, thread.id(), addr)
+                    .binary_unloaded(&mut self.session, thread, addr)
                     .await
                     .map_err(HandlerError)?;
 
@@ -441,14 +441,14 @@ where
                 Ok(())
             }
             DebugStateChange::ThreadCreated(new_thread) => {
-                self.handle_created_thread_in_tracee(new_thread, Some(thread.id()), prev_instrs)
+                self.handle_created_thread_in_tracee(new_thread, Some(thread), prev_instrs)
                     .await
             }
             DebugStateChange::ThreadExited { exit_code } => {
                 tracing::info!(exit_code, "thread exited");
 
                 self.handler
-                    .thread_exited(&mut self.session, thread.id(), exit_code)
+                    .thread_exited(&mut self.session, thread, exit_code)
                     .await
                     .map_err(HandlerError)?;
 
