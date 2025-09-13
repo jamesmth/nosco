@@ -382,3 +382,53 @@ async fn test_multithreading(is_64bit: bool) {
 
     drop(tracee_path);
 }
+
+#[test(tokio::test)]
+async fn test_execve() {
+    let base_dir: PathBuf = "tests/linux".to_owned().into();
+
+    let tracee_path =
+        self::utils::compile_tracee_with_gcc(&base_dir.join("execve.c"), true, false, false);
+    let tracee_name = tracee_path.file_name().unwrap().to_string_lossy();
+
+    let trace_handler = TestTraceHandler::new(tracee_name.to_string(), true, None);
+
+    let tracer = nosco_tracer::tracer::Tracer::builder()
+        .with_debugger(nosco_debugger::Debugger)
+        .with_event_handler(trace_handler)
+        .trace_scopes()
+        .scope(tracee_name.as_ref(), "main", 0)
+        .scope(tracee_name, "thread_start", 0)
+        .scope("libc.so.6", "__GI_execve", 0)
+        .build();
+
+    let (mut tracee, _) = tracer
+        .spawn(nosco_tracer::Command::new(&tracee_path).arg("hello"))
+        .await
+        .expect("spawn");
+
+    let status = tracee.resume_and_trace().await.expect("run");
+    match status {
+        ExitStatus::ExitCode(exit_code) => assert_eq!(exit_code, 0),
+        ExitStatus::Exception(exception) => {
+            panic!("Traced process exited by {}", exception.0);
+        }
+    }
+
+    let mut generated_trace = tracee.into_inner().into_kdl();
+    let mut expected_trace = tokio::fs::read_to_string(base_dir.join("execve.kdl"))
+        .await
+        .map(|s| KdlDocument::parse(&s).expect("parse"))
+        .expect("read");
+
+    generated_trace.autoformat();
+    expected_trace.autoformat();
+
+    let generated_trace = generated_trace.to_string();
+    let expected_trace = expected_trace.to_string();
+    if generated_trace != expected_trace {
+        panic!("EXPECTED:\n{expected_trace}GOT:\n{generated_trace}");
+    }
+
+    drop(tracee_path);
+}

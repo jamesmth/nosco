@@ -1,0 +1,29 @@
+start {
+    binaries {
+        <exe>
+        ld-linux-x86-64.so.2
+        linux-vdso.so.1
+    }
+}
+
+thread 1 {
+    load_binary libc.so.6
+
+    call main {
+        create_thread 2
+
+        unload_binary libc.so.6
+        unload_binary linux-vdso.so.1
+        unload_binary ld-linux-x86-64.so.2
+        unload_binary <exe>
+
+        load_binary <exe>
+        load_binary ld-linux-x86-64.so.2
+        load_binary linux-vdso.so.1
+        load_binary libc.so.6
+    }
+}
+
+thread 2 {
+    call execve
+}

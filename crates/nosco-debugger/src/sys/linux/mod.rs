@@ -150,7 +150,9 @@ mod imp {
 
         ptrace::setoptions(
             pid,
-            ptrace::Options::PTRACE_O_TRACECLONE | ptrace::Options::PTRACE_O_TRACEEXIT,
+            ptrace::Options::PTRACE_O_TRACECLONE
+                | ptrace::Options::PTRACE_O_TRACEEXIT
+                | ptrace::Options::PTRACE_O_TRACEEXEC,
         )?;
 
         Ok(())
