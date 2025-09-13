@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use framehop::Unwinder;
 use indexmap::IndexSet;
-use nix::libc::{PTRACE_EVENT_CLONE, PTRACE_EVENT_EXIT};
+use nix::libc::{PTRACE_EVENT_CLONE, PTRACE_EVENT_EXEC, PTRACE_EVENT_EXIT};
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
@@ -214,6 +214,13 @@ impl Session {
                         ptrace::detach(new_pid, None)?;
                         continue;
                     }
+                }
+                WaitStatus::PtraceEvent(pid, Signal::SIGTRAP, PTRACE_EVENT_EXEC) => {
+                    let orig_pid = ptrace::getevent(pid).map(|id| Pid::from_raw(id as i32))?;
+
+                    tracing::debug!(pid = %orig_pid, "execve called");
+
+                    todo!()
                 }
                 WaitStatus::PtraceEvent(pid, Signal::SIGTRAP, PTRACE_EVENT_EXIT) => {
                     let exit_code = ptrace::getevent(pid)? as i32;

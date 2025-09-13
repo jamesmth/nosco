@@ -204,6 +204,18 @@ pub enum DebugStateChange<S: DebugSession + ?Sized> {
         exit_code: i32,
     },
 
+    /// A thread has an ID change.
+    ///
+    /// # Note
+    ///
+    /// This state change may happen in very specific cases, like
+    /// an `execve` being performed by a thread which is not the main
+    /// thread.
+    ThreadMoved {
+        /// The thread ID before the change.
+        prev_thread_id: u64,
+    },
+
     /// A binary is loaded by the debuggee.
     BinaryLoaded(S::MappedBinary),
 
